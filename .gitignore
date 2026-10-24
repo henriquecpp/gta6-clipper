@@ -1,0 +1,26 @@
+# Secrets and local config
+.env
+config.yaml
+
+# Outputs
+/output/
+/bin/
+/backups/
+graphify-out
+docs/
+CLAUDE.md
+coverage.out
+coverage.html
+*.test
+*.exe
+
+# Local databases
+*.db
+*.db-shm
+*.db-wal
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

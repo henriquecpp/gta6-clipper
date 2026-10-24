@@ -1,0 +1,95 @@
+# Copy to config.yaml (mounted read-only in the app container).
+# Durations use Go syntax (30s, 5m, 6h). Sizes accept KiB/MiB/GiB.
+
+streamers:
+  - login: exemplo_streamer
+    language: en
+    allows_clips: true
+    layout: blur            # blur | stack | crop
+    # stack: { facecam: [0.70, 0.00, 0.30, 0.30], gameplay: [0.0, 0.0, 1.0, 1.0] }
+    offsets: { capture_latency: 4s, chat: 8s, clip: 20s }
+
+twitch:
+  live_poll_interval: 45s
+  capture_quality: 720p60
+  token_file: /data/twitch_user_token.json
+
+capture:
+  buffer_dir: /buffer
+  pending_dir: /pending
+  buffer_duration: 10m
+  buffer_max_bytes: 4GiB
+  segment_duration: 2s
+
+approval:
+  ttl: 6h
+
+concurrency:
+  max_streams: 8
+  ffmpeg_workers: 4
+  ffmpeg_threads_per_job: 4
+  transcribe_workers: 1
+  render_workers: 1
+
+render:
+  output_dir: /output
+  width: 1080
+  height: 1920
+  fps: 30
+  encoder: h264_nvenc       # automatic fallback to libx264
+  min_duration: 15s
+  max_duration: 60s
+  max_file_bytes: 45MiB
+  preview_height: 480
+  preview_duration: 40s
+  font: Noto Sans
+  max_line_chars: 28
+  headline_max_chars: 60
+
+whisper:
+  url: http://whisper:8080
+  timeout: 5m
+
+editor:
+  max_tokens: 2000
+  timeout: 90s
+  max_cost_per_clip_usd: 0.05
+  tool_choice: tool         # tool (forced) | auto (strict tool, for models that reject forced tool_choice)
+  peak_tolerance: 5s
+  pricing:                  # USD per million tokens (fill with current prices for ANTHROPIC_MODEL)
+    input: 0
+    output: 0
+    cache_write: 0
+    cache_read: 0
+
+http:
+  addr: ":8080"
+  shutdown_timeout: 45s
+
+detection:
+  tick: 500ms
+  warmup: 5m
+  cooldown: 60s
+  threshold_on: 3.0
+  threshold_off: 1.5
+  min_signal_z: 2.0
+  z_max: 6.0
+  pre_roll: 60s
+  post_roll: 30s
+  weights: { voice: 0.45, chat: 0.45, clips: 0.10 }
+  voice:
+    frame: 30ms
+    window: 400ms
+    ewma_alpha: 0.01
+    stale_after: 2s
+  chat:
+    window: 10s
+    sustain: 4s
+    ewma_alpha: 0.02
+    emotes:
+      en: { KEKW: 2.0, LUL: 1.5, OMEGALUL: 2.5, LMAO: 1.5 }
+      pt: { kkkk: 2.0, KKKK: 2.0 }
+  clips:
+    poll_interval: 30s
+    group_window: 15s
+    min_clips: 3
