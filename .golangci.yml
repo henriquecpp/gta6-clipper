@@ -1,0 +1,131 @@
+version: "2"
+
+run:
+  timeout: 5m
+  build-tags:
+    - integration
+    - gpu
+  relative-path-mode: gomod
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - depguard
+    - errorlint
+    - bodyclose
+    - noctx
+    - misspell
+    - revive
+    - unconvert
+    - nolintlint
+  settings:
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+        - name: var-naming
+        - name: error-strings
+        - name: error-naming
+        - name: receiver-naming
+        - name: indent-error-flow
+        - name: context-as-argument
+        - name: unused-parameter
+          disabled: true
+    depguard:
+      # Dependency rule (CLAUDE.md §5):
+      #   cmd ──► adapters ──► app ──► domain
+      #                 └────────────► domain
+      rules:
+        domain:
+          list-mode: strict
+          files:
+            - "**/internal/domain/**"
+            - "!$test"
+          allow:
+            - $gostd
+          deny:
+            - pkg: os
+              desc: domain is pure (no I/O)
+            - pkg: os/exec
+              desc: domain is pure (no I/O)
+            - pkg: net
+              desc: domain is pure (no I/O)
+            - pkg: net/http
+              desc: domain is pure (no I/O)
+            - pkg: database/sql
+              desc: domain is pure (no I/O)
+            - pkg: log
+              desc: domain does not log
+            - pkg: log/slog
+              desc: domain does not log
+        domain-tests:
+          list-mode: strict
+          files:
+            - "**/internal/domain/**_test.go"
+          allow:
+            - $gostd
+            - github.com/henriquecpp/gta6-clipper/internal/domain
+        app:
+          list-mode: strict
+          files:
+            - "**/internal/app/**"
+          allow:
+            - $gostd
+            - github.com/henriquecpp/gta6-clipper/internal/domain
+            - github.com/henriquecpp/gta6-clipper/internal/app
+        adapters:
+          list-mode: lax
+          files:
+            - "**/internal/adapters/**"
+            - "!**/internal/adapters/out/sqlite/**"
+          deny:
+            - pkg: github.com/henriquecpp/gta6-clipper/internal/adapters
+              desc: adapters never import other adapters (only cmd wires them)
+            - pkg: github.com/henriquecpp/gta6-clipper/cmd
+              desc: adapters never import cmd
+        adapter-sqlite:
+          list-mode: lax
+          files:
+            - "**/internal/adapters/out/sqlite/**"
+          deny:
+            - pkg: github.com/henriquecpp/gta6-clipper/internal/adapters/in
+              desc: adapters never import other adapters
+            - pkg: github.com/henriquecpp/gta6-clipper/internal/adapters/out/twitchapi
+              desc: adapters never import other adapters
+            - pkg: github.com/henriquecpp/gta6-clipper/internal/adapters/out/capture
+              desc: adapters never import other adapters
+            - pkg: github.com/henriquecpp/gta6-clipper/internal/adapters/out/render
+              desc: adapters never import other adapters
+            - pkg: github.com/henriquecpp/gta6-clipper/internal/adapters/out/whisper
+              desc: adapters never import other adapters
+            - pkg: github.com/henriquecpp/gta6-clipper/internal/adapters/out/claude
+              desc: adapters never import other adapters
+            - pkg: github.com/henriquecpp/gta6-clipper/internal/adapters/out/telegram
+              desc: adapters never import other adapters
+            - pkg: github.com/henriquecpp/gta6-clipper/internal/adapters/out/resilience
+              desc: adapters never import other adapters
+        platform:
+          list-mode: lax
+          files:
+            - "**/internal/platform/**"
+          deny:
+            - pkg: github.com/henriquecpp/gta6-clipper/internal/app
+              desc: platform is infrastructure support; it must not depend on use cases
+            - pkg: github.com/henriquecpp/gta6-clipper/internal/adapters
+              desc: platform must not depend on adapters
+  exclusions:
+    generated: strict
+    paths:
+      - internal/adapters/out/sqlite/sqlcgen
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/henriquecpp/gta6-clipper

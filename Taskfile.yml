@@ -1,0 +1,128 @@
+# https://taskfile.dev — runs natively on Windows (go-task embeds a POSIX shell interpreter).
+version: "3"
+
+vars:
+  COMPOSE: docker compose
+  GO_IMAGE: golang:1.27.4-trixie
+  RACE_IN_DOCKER: '{{if eq OS "windows"}}true{{else}}false{{end}}'
+
+tasks:
+  default:
+    cmds:
+      - task --list
+
+  generate:
+    desc: Run sqlc generate
+    cmds:
+      - sqlc generate
+
+  generate:check:
+    desc: Fail if sqlc-generated code is out of date
+    cmds:
+      - sqlc diff
+
+  lint:
+    desc: go vet + golangci-lint (staticcheck, depguard, ...)
+    cmds:
+      - go vet ./...
+      - go vet -tags integration,gpu ./...
+      - golangci-lint run ./...
+
+  test:
+    desc: Unit tests (host, pure Go)
+    cmds:
+      - go test ./...
+
+  test:race:
+    desc: Unit tests with -race (on Windows runs in the golang container, since -race needs cgo + gcc)
+    cmds:
+      - cmd: >-
+          docker run --rm
+          -v "{{toSlash .ROOT_DIR}}:/src" -w /src
+          -v gta6-clipper-go-mod-cache:/go/pkg/mod
+          -v gta6-clipper-go-build-cache:/root/.cache/go-build
+          -e CGO_ENABLED=1
+          {{.GO_IMAGE}} go test -race -count=1 ./...
+        platforms: [windows]
+      - cmd: CGO_ENABLED=1 go test -race -count=1 ./...
+        platforms: [linux, darwin]
+
+  test:integration:
+    desc: Integration tests (//go:build integration) inside the app test container (needs ffmpeg)
+    cmds:
+      - "{{.COMPOSE}} --profile test build tester"
+      - "{{.COMPOSE}} --profile test run --rm --no-deps tester go test -race -count=1 -tags integration ./..."
+
+  test:gpu:
+    desc: GPU tests (//go:build gpu) — real whisper (CUDA) and real NVENC
+    cmds:
+      - "{{.COMPOSE}} --profile test build tester whisper"
+      - "{{.COMPOSE}} --profile test up -d whisper"
+      - "{{.COMPOSE}} --profile test run --rm tester go test -count=1 -v -tags gpu -run GPU ./..."
+
+  cover:
+    desc: Coverage report (target >= 80% in domain and app)
+    cmds:
+      - go test -coverprofile=coverage.out ./internal/domain/... ./internal/app/...
+      - go tool cover -func=coverage.out
+
+  build:
+    desc: Build Docker images
+    cmds:
+      - "{{.COMPOSE}} build app whisper"
+
+  up:
+    desc: Start the stack
+    cmds:
+      - "{{.COMPOSE}} up -d"
+
+  up:obs:
+    desc: Start the stack with Prometheus + Grafana
+    cmds:
+      - "{{.COMPOSE}} --profile observability up -d"
+
+  down:
+    desc: Stop the stack
+    cmds:
+      - "{{.COMPOSE}} --profile observability --profile test down"
+
+  logs:
+    desc: Follow stack logs
+    cmds:
+      - "{{.COMPOSE}} logs -f --tail=200"
+
+  whisper:model:
+    desc: Download the whisper model into the whisper-models volume
+    vars:
+      MODEL: '{{.MODEL | default "large-v3-turbo"}}'
+    cmds:
+      - "{{.COMPOSE}} run --rm --no-deps --user root --entrypoint sh whisper -c 'download-ggml-model.sh {{.MODEL}} /models && chown -R 10001:10001 /models'"
+
+  gpu:check:
+    desc: Validate CUDA (sm_120) in whisper, NVENC in the app ffmpeg and word timestamps
+    cmds:
+      - "{{.COMPOSE}} run --rm --no-deps --entrypoint gpu-check whisper"
+      - "{{.COMPOSE}} up -d whisper"
+      - "{{.COMPOSE}} run --rm --entrypoint clipper app gpucheck"
+
+  db:backup:
+    desc: Backup the SQLite database (VACUUM INTO) to ./backups
+    vars:
+      STAMP: '{{now | date "20060102-150405"}}'
+    cmds:
+      - "{{.COMPOSE}} exec app clipper backup /data/backup-{{.STAMP}}.db"
+      - "{{.COMPOSE}} cp app:/data/backup-{{.STAMP}}.db ./backups/clipper-{{.STAMP}}.db"
+      - "{{.COMPOSE}} exec app rm -f /data/backup-{{.STAMP}}.db"
+
+  auth:twitch:
+    desc: Obtain the Twitch user token (Device Code Flow) and store it in the clipper-data volume
+    cmds:
+      - "{{.COMPOSE}} run --rm --no-deps app twitch-auth"
+    interactive: true
+
+  check:
+    desc: generate without diff + lint + test:race (run before finishing any task)
+    cmds:
+      - task: generate:check
+      - task: lint
+      - task: test:race
