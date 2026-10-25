@@ -1,0 +1,165 @@
+name: gta6-clipper
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: deploy/app.Dockerfile
+      target: runtime
+    image: gta6-clipper-app:dev
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      CLIPPER_CONFIG: /etc/clipper/config.yaml
+      WHISPER_URL: http://whisper:8080
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - clipper-data:/data
+      - clipper-buffer:/buffer
+      - clipper-pending:/pending
+      - ./output:/output
+      - ./config.yaml:/etc/clipper/config.yaml:ro
+    depends_on:
+      whisper:
+        condition: service_started
+    stop_grace_period: 60s
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "8"
+          memory: 6g
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, video, compute, utility]
+
+  whisper:
+    build:
+      context: .
+      dockerfile: deploy/whisper.Dockerfile
+    image: gta6-clipper-whisper:dev
+    restart: unless-stopped
+    volumes:
+      - whisper-models:/models
+    expose:
+      - "8080"
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 6g
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, compute, utility]
+
+  tester:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: deploy/app.Dockerfile
+      target: integration
+    image: gta6-clipper-tester:dev
+    environment:
+      WHISPER_URL: http://whisper:8080
+    volumes:
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    depends_on:
+      whisper:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, video, compute, utility]
+
+  prometheus:
+    profiles: ["observability"]
+    image: prom/prometheus:v3.16.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=30d
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1g
+
+  grafana:
+    profiles: ["observability"]
+    image: grafana/grafana:13.3.1
+    restart: unless-stopped
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512m
+
+volumes:
+  clipper-data:
+    name: clipper-data
+  clipper-buffer:
+    name: clipper-buffer
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: "size=6g,uid=10001,gid=10001,mode=0700"
+  clipper-pending:
+    name: clipper-pending
+  whisper-models:
+    name: whisper-models
+  go-mod-cache:
+    name: gta6-clipper-go-mod-cache
+  go-build-cache:
+    name: gta6-clipper-go-build-cache
+  prometheus-data:
+    name: gta6-clipper-prometheus-data
+  grafana-data:
+    name: gta6-clipper-grafana-data

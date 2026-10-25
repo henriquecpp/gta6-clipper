@@ -1,0 +1,15 @@
+.git
+.env
+config.yaml
+output
+backups
+bin
+*.db
+*.db-shm
+*.db-wal
+coverage.out
+coverage.html
+docs
+.github
+.idea
+.vscode
