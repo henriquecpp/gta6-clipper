@@ -1,0 +1,55 @@
+package domain
+
+// SignalKind identifies a detection signal.
+type SignalKind string
+
+// Signal kinds (CLAUDE.md §9).
+const (
+	SignalVoice SignalKind = "voice"
+	SignalChat  SignalKind = "chat"
+	SignalClips SignalKind = "clips"
+)
+
+// SignalKinds lists every kind in a stable order.
+var SignalKinds = []SignalKind{SignalVoice, SignalChat, SignalClips}
+
+// Signal is one sample of a signal on the stream timeline. Value is the
+// normalized intensity (for voice and chat, a z-score; for clips, a count).
+type Signal struct {
+	Kind  SignalKind
+	Pos   StreamPos
+	Value float64
+}
+
+// SignalPoint is the per-second state of all signals, used to build the
+// timeline sent to the editor.
+type SignalPoint struct {
+	Pos   StreamPos
+	Voice float64
+	Chat  float64
+	Clips float64
+}
+
+// Moment is a detected peak with the signal values that produced it.
+type Moment struct {
+	Peak  StreamPos
+	Score float64
+	// Values holds every signal's (clamped) value at the peak.
+	Values map[SignalKind]float64
+	// ViewerClips is how many viewer clips were grouped around the peak.
+	ViewerClips int
+	// Late is true when the moment came only from the late clip signal.
+	Late bool
+}
+
+// Clone returns a deep copy.
+func (m Moment) Clone() Moment {
+	c := m
+	if m.Values != nil {
+		c.Values = make(map[SignalKind]float64, len(m.Values))
+		for k, v := range m.Values {
+			c.Values[k] = v
+		}
+	}
+	return c
+}
