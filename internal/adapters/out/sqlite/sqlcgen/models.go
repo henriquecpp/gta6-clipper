@@ -4,6 +4,59 @@
 
 package sqlcgen
 
+import (
+	"database/sql"
+)
+
+type Clip struct {
+	ID               string
+	Streamer         string
+	StreamID         string
+	Game             string
+	StreamTitle      string
+	State            string
+	PeakMs           int64
+	WindowFromMs     int64
+	WindowToMs       int64
+	Score            float64
+	Signals          string
+	SourceMedia      string
+	PreviewMedia     string
+	FinalMedia       string
+	PreviewMessage   string
+	Headline         string
+	PostText         string
+	MicroUsd         int64
+	InputTokens      int64
+	OutputTokens     int64
+	CacheWriteTokens int64
+	CacheReadTokens  int64
+	FailureReason    string
+	FailedFrom       string
+	Decision         string
+	DecidedAt        sql.NullString
+	CreatedAt        string
+	UpdatedAt        string
+	DetectedAt       sql.NullString
+	PreviewSentAt    sql.NullString
+	ApprovedAt       sql.NullString
+	DiscardedAt      sql.NullString
+	ExpiredAt        sql.NullString
+	EditingAt        sql.NullString
+	RenderedAt       sql.NullString
+	DeliveredAt      sql.NullString
+	FailedAt         sql.NullString
+}
+
+type Decision struct {
+	ClipID    string
+	Streamer  string
+	Decision  string
+	DecidedAt string
+	Score     float64
+	Signals   string
+}
+
 type Streamer struct {
 	Login         string
 	BroadcasterID string
