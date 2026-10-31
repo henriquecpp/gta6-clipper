@@ -19,6 +19,11 @@ linters:
     - unconvert
     - nolintlint
   settings:
+    misspell:
+      # Product text (Telegram messages, captions, prompts) is in PT-BR.
+      ignore-rules:
+        - momento
+        - momentos
     nolintlint:
       require-explanation: true
       require-specific: true

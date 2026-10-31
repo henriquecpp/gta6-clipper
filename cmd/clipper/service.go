@@ -9,25 +9,42 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/henriquecpp/gta6-clipper/internal/adapters/in/scheduler"
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/sqlite"
+	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/twitchapi"
+	"github.com/henriquecpp/gta6-clipper/internal/app"
+	"github.com/henriquecpp/gta6-clipper/internal/platform/clock"
+	"github.com/henriquecpp/gta6-clipper/internal/platform/config"
 	"github.com/henriquecpp/gta6-clipper/internal/platform/httpserver"
 	"github.com/henriquecpp/gta6-clipper/internal/platform/logging"
 )
 
+func configPath() string { return envOr("CLIPPER_CONFIG", "/etc/clipper/config.yaml") }
+
+func loadConfig() (*config.Config, error) {
+	return config.Load(configPath(), os.Getenv)
+}
+
 func runService(_ []string, stderr io.Writer) error {
-	log, err := logging.New(stderr, os.Getenv("LOG_LEVEL"), logging.FormatJSON)
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	log, err := logging.New(stderr, cfg.LogLevel, logging.FormatJSON)
 	if err != nil {
 		return err
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	clk := clock.Real{}
 
-	db, err := sqlite.Open(ctx, envOr("CLIPPER_DB", "/data/clipper.db"))
+	db, err := sqlite.Open(ctx, cfg.DBPath)
 	if err != nil {
 		return err
 	}
@@ -36,14 +53,45 @@ func runService(_ []string, stderr io.Writer) error {
 			log.Error("close database", logging.Err(cerr))
 		}
 	}()
+	repo := sqlite.NewRepo(db)
+	streamers := cfg.DomainStreamers()
+	if err := repo.SyncStreamers(ctx, streamers, clk.Now()); err != nil {
+		return err
+	}
+
+	var tasks []scheduler.Task
+	if cfg.Secrets.HasTwitch() {
+		tw := twitchapi.New(cfg.Secrets.TwitchClientID, cfg.Secrets.TwitchClientSecret, twitchapi.WithLogger(log))
+		userTokens := tw.NewUserTokens(cfg.Twitch.TokenFile)
+		if err := userTokens.Load(); err != nil {
+			log.Warn("twitch user token unavailable: chat signal disabled until `task auth:twitch` is run", logging.Err(err))
+			userTokens = nil
+		}
+		monitor := app.NewMonitorLives(tw, streamers, nil, log)
+		tasks = append(tasks,
+			scheduler.Task{Name: "live-poll", Interval: cfg.Twitch.LivePollInterval.D(), Jitter: 0.1, Immediate: true, Run: monitor.Poll},
+			scheduler.Task{Name: "token-validate", Interval: time.Hour, Jitter: 0.05, Immediate: true, Run: func(ctx context.Context) error {
+				errs := []error{tw.ValidateApp(ctx)}
+				if userTokens != nil {
+					errs = append(errs, userTokens.Validate(ctx))
+				}
+				return errors.Join(errs...)
+			}},
+		)
+		log.Info("live monitoring enabled", slog.Int("streamers", len(monitor.Logins())))
+	} else {
+		log.Warn("TWITCH_CLIENT_ID/TWITCH_CLIENT_SECRET missing: live monitoring disabled (degraded mode)")
+	}
 
 	reg := prometheus.NewRegistry()
-	srv := httpserver.New(envOr("CLIPPER_HTTP_ADDR", ":8080"),
+	srv := httpserver.New(cfg.HTTP.Addr,
 		httpserver.WithLogger(log),
+		httpserver.WithShutdownTimeout(cfg.HTTP.ShutdownTimeout.D()),
 		httpserver.WithMetrics(promhttp.HandlerFor(reg, promhttp.HandlerOpts{Registry: reg})))
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return srv.Run(gctx) })
+	g.Go(func() error { return scheduler.New(log, tasks...).Run(gctx) })
 	srv.SetReady(true)
 	log.Info("clipper started")
 
@@ -59,11 +107,15 @@ func backup(args []string, stdout io.Writer) error {
 		return errors.New("usage: clipper backup DEST")
 	}
 	ctx := context.Background()
-	db, err := sqlite.Open(ctx, envOr("CLIPPER_DB", "/data/clipper.db"))
+	dbPath := envOr("CLIPPER_DB", "/data/clipper.db")
+	if cfg, err := loadConfig(); err == nil {
+		dbPath = cfg.DBPath
+	}
+	db, err := sqlite.Open(ctx, dbPath)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = db.Close() }() // read-only use; the backup error is what matters
+	defer func() { _ = db.Close() }() // the backup error is what matters
 	if err := sqlite.Backup(ctx, db, args[0]); err != nil {
 		return err
 	}
@@ -71,6 +123,31 @@ func backup(args []string, stdout io.Writer) error {
 	return nil
 }
 
-func twitchAuth(_ []string, _ io.Writer) error {
-	return errors.New("not implemented yet (Phase 1)")
+// twitchAuth runs the Device Code Flow and stores the user token.
+func twitchAuth(_ []string, stdout io.Writer) error {
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	if cfg.Secrets.TwitchClientID == "" {
+		return errors.New("TWITCH_CLIENT_ID is not set (.env)")
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	tw := twitchapi.New(cfg.Secrets.TwitchClientID, cfg.Secrets.TwitchClientSecret)
+	tok, err := tw.DeviceFlow(ctx, []string{twitchapi.ChatScope}, func(uri, code string) {
+		_, _ = fmt.Fprintf(stdout, "Open %s and enter the code: %s\nWaiting for authorization...\n", uri, code)
+	})
+	if err != nil {
+		return err
+	}
+	store := tw.NewUserTokens(cfg.Twitch.TokenFile)
+	if err := store.Store(tok); err != nil {
+		return err
+	}
+	if err := store.Validate(ctx); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(stdout, "Twitch user token stored in %s (user id %s)\n", cfg.Twitch.TokenFile, store.UserID())
+	return nil
 }
