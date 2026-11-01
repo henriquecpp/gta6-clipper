@@ -21,6 +21,16 @@ type Signal struct {
 	Value float64
 }
 
+// AudioFrame is the energy of a short audio frame (20–50 ms) of the capture,
+// already classified by the voice activity detector.
+type AudioFrame struct {
+	Pos StreamPos
+	// DBFS is the RMS energy in dB relative to full scale (<= 0).
+	DBFS float64
+	// Speech is true when the VAD classified the frame as voice.
+	Speech bool
+}
+
 // SignalPoint is the per-second state of all signals, used to build the
 // timeline sent to the editor.
 type SignalPoint struct {
