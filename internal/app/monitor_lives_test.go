@@ -51,6 +51,9 @@ func TestMonitorLivesEntriesAndExits(t *testing.T) {
 	if len(live) != 2 || live[0].Viewers != 50 {
 		t.Fatalf("live = %+v", live)
 	}
+	if len(obs.Updated) != 1 || obs.Updated[0].Viewers != 50 {
+		t.Fatalf("updated = %+v", obs.Updated)
+	}
 
 	// Transient error keeps the known set.
 	p.SetStreamErr(errors.New("timeout"))

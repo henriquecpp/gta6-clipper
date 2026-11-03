@@ -41,5 +41,17 @@ type Clock interface {
 // Implementations must return quickly.
 type LiveObserver interface {
 	StreamStarted(ctx context.Context, s domain.Streamer, live domain.LiveStream)
+	// StreamUpdated reports refreshed metadata (viewers, title, game) of a live.
+	StreamUpdated(ctx context.Context, live domain.LiveStream)
 	StreamEnded(ctx context.Context, s domain.Streamer, live domain.LiveStream)
+}
+
+// MediaCapture holds the circular buffer of the captured streams.
+type MediaCapture interface {
+	// RetainWindow copies (without re-encoding) the window [from, to] of the
+	// buffer to the pending storage. It returns domain.ErrWindowUnavailable if
+	// the window is no longer (or not yet) in the buffer.
+	RetainWindow(ctx context.Context, streamID domain.StreamID, from, to domain.StreamPos) (domain.MediaRef, error)
+	// Delete removes a retained file; deleting a missing file is not an error.
+	Delete(ctx context.Context, ref domain.MediaRef) error
 }

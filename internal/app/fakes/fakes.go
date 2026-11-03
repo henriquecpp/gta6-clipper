@@ -115,6 +115,7 @@ func (p *Platform) RecentClips(ctx context.Context, broadcasterID string, since 
 type LiveObserver struct {
 	mu      sync.Mutex
 	Started []domain.LiveStream
+	Updated []domain.LiveStream
 	Ended   []domain.LiveStream
 }
 
@@ -125,6 +126,13 @@ func (o *LiveObserver) StreamStarted(_ context.Context, _ domain.Streamer, l dom
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.Started = append(o.Started, l)
+}
+
+// StreamUpdated records a metadata refresh.
+func (o *LiveObserver) StreamUpdated(_ context.Context, l domain.LiveStream) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.Updated = append(o.Updated, l)
 }
 
 // StreamEnded records an end.

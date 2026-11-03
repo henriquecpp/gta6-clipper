@@ -75,7 +75,7 @@ func (m *MonitorLives) Poll(ctx context.Context) error {
 		current[login] = l
 	}
 
-	var started, ended []domain.LiveStream
+	var started, ended, updated []domain.LiveStream
 	m.mu.Lock()
 	for login, prev := range m.live {
 		if cur, ok := current[login]; !ok || cur.ID != prev.ID {
@@ -86,6 +86,8 @@ func (m *MonitorLives) Poll(ctx context.Context) error {
 	for login, cur := range current {
 		if prev, ok := m.live[login]; !ok || prev.ID != cur.ID {
 			started = append(started, cur)
+		} else {
+			updated = append(updated, cur)
 		}
 		m.live[login] = cur // refresh title, game and viewers
 	}
@@ -94,6 +96,7 @@ func (m *MonitorLives) Poll(ctx context.Context) error {
 	byLogin := func(a, b domain.LiveStream) int { return cmp.Compare(a.Login, b.Login) }
 	slices.SortFunc(ended, byLogin)
 	slices.SortFunc(started, byLogin)
+	slices.SortFunc(updated, byLogin)
 	for _, l := range ended {
 		m.log.Info("live ended", slog.String("streamer", l.Login), slog.String("stream_id", string(l.ID)))
 		if m.observer != nil {
@@ -105,6 +108,11 @@ func (m *MonitorLives) Poll(ctx context.Context) error {
 			slog.String("game", l.Game), slog.String("title", l.Title), slog.Int("viewers", l.Viewers))
 		if m.observer != nil {
 			m.observer.StreamStarted(ctx, m.streamers[l.Login], l)
+		}
+	}
+	if m.observer != nil {
+		for _, l := range updated {
+			m.observer.StreamUpdated(ctx, l)
 		}
 	}
 	return nil
