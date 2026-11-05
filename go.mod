@@ -3,6 +3,8 @@ module github.com/henriquecpp/gta6-clipper
 go 1.27.4
 
 require (
+	github.com/coder/websocket v1.8.15
+	github.com/google/uuid v1.6.0
 	github.com/pressly/goose/v3 v3.30.1
 	github.com/prometheus/client_golang v1.25.0
 	go.yaml.in/yaml/v3 v3.0.6
@@ -14,7 +16,6 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mfridman/interpolate v0.2.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
