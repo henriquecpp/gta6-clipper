@@ -7,7 +7,7 @@ streamers:
     allows_clips: true
     layout: blur            # blur | stack | crop
     # stack: { facecam: [0.70, 0.00, 0.30, 0.30], gameplay: [0.0, 0.0, 1.0, 1.0] }
-    offsets: { capture_latency: 4s, chat: 8s, clip: 20s }
+    offsets: { capture_latency: 4s, chat: 8s, clip: 5s }
 
 twitch:
   live_poll_interval: 45s

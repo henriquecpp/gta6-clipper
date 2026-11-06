@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.yaml.in/yaml/v3"
 
@@ -263,7 +264,7 @@ func (c *Config) DomainStreamers() []domain.Streamer {
 }
 
 // defaultOffsets are used until measured per streamer (§9, Phases 2/3).
-var defaultOffsets = domain.Offsets{CaptureLatency: 4e9, Chat: 8e9, Clip: 20e9}
+var defaultOffsets = domain.Offsets{CaptureLatency: 4 * time.Second, Chat: 8 * time.Second, Clip: 5 * time.Second}
 
 func (s Streamer) domain() domain.Streamer {
 	d := domain.Streamer{

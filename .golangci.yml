@@ -51,6 +51,8 @@ linters:
             - "!$test"
           allow:
             - $gostd
+            # domain/detect builds on the domain types (still pure)
+            - github.com/henriquecpp/gta6-clipper/internal/domain
           deny:
             - pkg: os
               desc: domain is pure (no I/O)
