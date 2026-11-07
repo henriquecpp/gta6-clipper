@@ -28,6 +28,9 @@ type DetectionConfig struct {
 	PostRoll        time.Duration
 	// BufferDuration is how much media the capture buffer keeps.
 	BufferDuration time.Duration
+	// RetainMargin delays the retention past the post-roll so the segment
+	// holding the end of the window is complete (e.g. one segment + 1 s).
+	RetainMargin time.Duration
 }
 
 // IDFunc generates clip ids (UUID v7, injected by cmd).
@@ -219,7 +222,7 @@ func (d *DetectMoment) Tick(ctx context.Context, id domain.StreamID) error {
 	var ready []domain.Moment
 	keep := s.pending[:0]
 	for _, m := range s.pending {
-		if m.Peak+domain.StreamPos(d.cfg.PostRoll) <= capPos {
+		if m.Peak+domain.StreamPos(d.cfg.PostRoll+d.cfg.RetainMargin) <= capPos {
 			ready = append(ready, m)
 		} else {
 			keep = append(keep, m)
@@ -249,7 +252,6 @@ func (d *DetectMoment) accept(ctx context.Context, s *session, m domain.Moment, 
 	w.From = max(w.From, bufferStart)
 
 	s.mu.Lock()
-	timeline := s.signalTimeline(w)
 	live := s.live
 	s.mu.Unlock()
 
@@ -266,11 +268,17 @@ func (d *DetectMoment) accept(ctx context.Context, s *session, m domain.Moment, 
 	}
 
 	start := d.clock.Now()
-	ref, err := d.capture.RetainWindow(ctx, live.ID, w.From, w.To)
+	ref, retained, err := d.capture.RetainWindow(ctx, live.ID, w.From, w.To)
 	d.metrics.StageDuration("retain", d.clock.Now().Sub(start))
 	if err != nil {
 		return fmt.Errorf("retain window for %s at %s: %w", s.streamer.Login, m.Peak, err)
 	}
+	if retained.Valid() && retained.Contains(m.Peak) {
+		w = retained // whole segments: the clip records what was actually kept
+	}
+	s.mu.Lock()
+	timeline := s.signalTimeline(w)
+	s.mu.Unlock()
 	id, err := d.newID()
 	if err != nil {
 		d.deleteMedia(ctx, ref)

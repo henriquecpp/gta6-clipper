@@ -31,6 +31,7 @@ func detectionConfig() app.DetectionConfig {
 		PreRoll:         60 * time.Second,
 		PostRoll:        30 * time.Second,
 		BufferDuration:  10 * time.Minute,
+		RetainMargin:    3 * time.Second,
 	}
 }
 
@@ -57,6 +58,7 @@ type harness struct {
 
 func newHarness(t *testing.T, withCapture bool) *harness {
 	h := &harness{t: t, clock: fakes.NewClock(captureStart), repo: fakes.NewClipRepo(), capture: fakes.NewMediaCapture(), metrics: fakes.NewMetrics()}
+	h.capture.Pad = domain.StreamPos(time.Second)
 	opts := []app.DetectMomentOption{
 		app.WithClipHandler(func(_ context.Context, c *domain.Clip) { h.mu.Lock(); h.handled = append(h.handled, c); h.mu.Unlock() }),
 		app.WithDetectMetrics(h.metrics),
@@ -141,17 +143,18 @@ func TestDetectMomentHappyPath(t *testing.T) {
 	if c.Moment.Values[domain.SignalVoice] < 2 || c.Moment.Values[domain.SignalChat] < 2 {
 		t.Fatalf("signals at peak = %v", c.Moment.Values)
 	}
-	if c.Window.From != c.Moment.Peak-domain.StreamPos(60*time.Second) || c.Window.To != c.Moment.Peak+domain.StreamPos(30*time.Second) {
+	// The capture retains whole segments: the clip records the retained window.
+	if c.Window.From != c.Moment.Peak-domain.StreamPos(61*time.Second) || c.Window.To != c.Moment.Peak+domain.StreamPos(31*time.Second) {
 		t.Fatalf("window = %+v for peak %v", c.Window, c.Moment.Peak)
 	}
-	if len(h.capture.Calls) != 1 || h.capture.Calls[0].From != c.Window.From || h.capture.Calls[0].StreamID != "s1" {
+	if len(h.capture.Calls) != 1 || h.capture.Calls[0].From != c.Moment.Peak-domain.StreamPos(60*time.Second) || h.capture.Calls[0].StreamID != "s1" {
 		t.Fatalf("retain calls = %+v", h.capture.Calls)
 	}
 	if c.StreamID != "s1" || c.Game != "GTA VI" || c.Streamer != "streamer" || !h.capture.IsLive(c.SourceMedia) {
 		t.Fatalf("clip = %+v", c)
 	}
-	if n := len(c.Timeline); n < 90 || n > 91 {
-		t.Fatalf("timeline has %d points, want one per second over 90 s", n)
+	if n := len(c.Timeline); n < 92 || n > 93 {
+		t.Fatalf("timeline has %d points, want one per second over the 92 s window", n)
 	}
 	if len(h.handled) != 1 || h.handled[0].ID != c.ID {
 		t.Fatalf("clip handler calls = %d", len(h.handled))

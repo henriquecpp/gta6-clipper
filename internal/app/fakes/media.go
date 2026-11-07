@@ -24,6 +24,8 @@ type MediaCapture struct {
 	Deleted   []domain.MediaRef
 	RetainErr error
 	DeleteErr error
+	// Pad widens the retained window on both sides.
+	Pad domain.StreamPos
 }
 
 var _ app.MediaCapture = (*MediaCapture)(nil)
@@ -33,20 +35,21 @@ func NewMediaCapture() *MediaCapture {
 	return &MediaCapture{Live: make(map[domain.MediaRef]bool)}
 }
 
-// RetainWindow records the call and returns a ref.
-func (m *MediaCapture) RetainWindow(ctx context.Context, id domain.StreamID, from, to domain.StreamPos) (domain.MediaRef, error) {
+// RetainWindow records the call and returns a ref; the retained window is the
+// requested one widened by Pad on each side (like whole segments would).
+func (m *MediaCapture) RetainWindow(ctx context.Context, id domain.StreamID, from, to domain.StreamPos) (domain.MediaRef, domain.Window, error) {
 	if err := ctx.Err(); err != nil {
-		return "", err
+		return "", domain.Window{}, err
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.RetainErr != nil {
-		return "", m.RetainErr
+		return "", domain.Window{}, m.RetainErr
 	}
 	m.Calls = append(m.Calls, RetainCall{StreamID: id, From: from, To: to})
 	ref := domain.MediaRef(fmt.Sprintf("/pending/%s-%d.ts", id, len(m.Calls)))
 	m.Live[ref] = true
-	return ref, nil
+	return ref, domain.Window{From: max(0, from-m.Pad), To: to + m.Pad}, nil
 }
 
 // Delete removes a ref.

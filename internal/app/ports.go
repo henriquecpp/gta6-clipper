@@ -49,9 +49,11 @@ type LiveObserver interface {
 // MediaCapture holds the circular buffer of the captured streams.
 type MediaCapture interface {
 	// RetainWindow copies (without re-encoding) the window [from, to] of the
-	// buffer to the pending storage. It returns domain.ErrWindowUnavailable if
-	// the window is no longer (or not yet) in the buffer.
-	RetainWindow(ctx context.Context, streamID domain.StreamID, from, to domain.StreamPos) (domain.MediaRef, error)
+	// buffer to the pending storage and returns the window actually retained
+	// (whole segments, so it may be slightly larger). It returns
+	// domain.ErrWindowUnavailable if the window is no longer (or not yet) in
+	// the buffer.
+	RetainWindow(ctx context.Context, streamID domain.StreamID, from, to domain.StreamPos) (domain.MediaRef, domain.Window, error)
 	// Delete removes a retained file; deleting a missing file is not an error.
 	Delete(ctx context.Context, ref domain.MediaRef) error
 }
