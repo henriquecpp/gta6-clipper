@@ -1,0 +1,14 @@
+--stdout
+--loglevel
+warning
+--twitch-low-latency
+--hls-live-edge
+2
+--stream-segment-threads
+2
+--retry-open
+2
+--stream-timeout
+30
+twitch.tv/some_streamer
+720p60,720p,720p30,best
