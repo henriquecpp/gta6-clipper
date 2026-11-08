@@ -17,9 +17,11 @@ import (
 
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/in/scheduler"
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/in/twitchingest"
+	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/capture"
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/sqlite"
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/twitchapi"
 	"github.com/henriquecpp/gta6-clipper/internal/app"
+	"github.com/henriquecpp/gta6-clipper/internal/domain"
 	"github.com/henriquecpp/gta6-clipper/internal/platform/clock"
 	"github.com/henriquecpp/gta6-clipper/internal/platform/config"
 	"github.com/henriquecpp/gta6-clipper/internal/platform/httpserver"
@@ -60,7 +62,24 @@ func runService(_ []string, stderr io.Writer) error {
 		return err
 	}
 
-	detectMoment := app.NewDetectMoment(detectionConfig(cfg), repo, newClipID, clk, log)
+	capt, err := capture.New(capture.Config{
+		BufferDir:       cfg.Capture.BufferDir,
+		PendingDir:      cfg.Capture.PendingDir,
+		BufferDuration:  cfg.Capture.BufferDuration.D(),
+		MaxBytes:        int64(cfg.Capture.BufferMaxBytes),
+		SegmentDuration: cfg.Capture.SegmentDuration.D(),
+		Quality:         cfg.Twitch.CaptureQuality,
+		Frame:           cfg.Detection.Voice.Frame.D(),
+		Threads:         cfg.Concurrency.FFmpegThreadsPerJob,
+		Workers:         cfg.Concurrency.FFmpegWorkers,
+	}, capture.WithLogger(log))
+	if err != nil {
+		return err
+	}
+	if err := pruneOrphans(ctx, repo, capt, log); err != nil {
+		log.Warn("prune orphan media", logging.Err(err))
+	}
+	detectMoment := app.NewDetectMoment(detectionConfig(cfg), repo, newClipID, clk, log, app.WithCapture(capt))
 
 	var tasks []scheduler.Task
 	var supervisor *twitchingest.Supervisor
@@ -77,7 +96,7 @@ func runService(_ []string, stderr io.Writer) error {
 			log.Warn("twitch user token unavailable: chat signal disabled until `task auth:twitch` is run", logging.Err(err))
 			userTokens = nil
 		}
-		var supOpts []twitchingest.SupervisorOption
+		supOpts := []twitchingest.SupervisorOption{twitchingest.WithCapturer(capt)}
 		if userTokens != nil {
 			supOpts = append(supOpts, twitchingest.WithChat(userTokens))
 		}
@@ -123,6 +142,25 @@ func runService(_ []string, stderr io.Writer) error {
 	}
 	log.Info("clipper stopped", slog.String("reason", context.Cause(ctx).Error()))
 	return nil
+}
+
+// pruneOrphans deletes pending media not referenced by any clip that can
+// still use it (left behind by crashes).
+func pruneOrphans(ctx context.Context, repo app.ClipRepository, capt *capture.Capture, log *slog.Logger) error {
+	clips, err := repo.ListByState(ctx, domain.StateDetected, domain.StatePreviewSent, domain.StateApproved,
+		domain.StateEditing, domain.StateRendered, domain.StateFailed)
+	if err != nil {
+		return err
+	}
+	keep := map[domain.MediaRef]bool{}
+	for _, c := range clips {
+		keep[c.SourceMedia], keep[c.PreviewMedia] = true, true
+	}
+	n, err := capt.Prune(keep)
+	if n > 0 {
+		log.Info("orphan media removed", slog.Int("files", n))
+	}
+	return err
 }
 
 func backup(args []string, stdout io.Writer) error {

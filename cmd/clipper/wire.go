@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -57,5 +58,6 @@ func detectionConfig(c *config.Config) app.DetectionConfig {
 		PreRoll:        d.PreRoll.D(),
 		PostRoll:       d.PostRoll.D(),
 		BufferDuration: c.Capture.BufferDuration.D(),
+		RetainMargin:   c.Capture.SegmentDuration.D() + time.Second,
 	}
 }

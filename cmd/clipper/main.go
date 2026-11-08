@@ -8,6 +8,8 @@
 //	healthcheck  probe the local /healthz (used by the container HEALTHCHECK)
 //	gpucheck     validate NVENC in ffmpeg and whisper word timestamps
 //	backup DEST  write a consistent copy of the SQLite database (VACUUM INTO)
+//	twitch-auth  obtain the Twitch user token (Device Code Flow)
+//	probe LOGIN  capture a public live for a while and estimate the HLS latency
 package main
 
 import (
@@ -40,8 +42,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		err = backup(args, stdout)
 	case "twitch-auth":
 		err = twitchAuth(args, stdout)
+	case "probe":
+		err = probe(args, stdout)
 	case "help", "-h", "--help":
-		_, _ = fmt.Fprintln(stdout, "usage: clipper [run|healthcheck|gpucheck|backup DEST|twitch-auth]")
+		_, _ = fmt.Fprintln(stdout, "usage: clipper [run|healthcheck|gpucheck|backup DEST|twitch-auth|probe LOGIN]")
 		return 0
 	default:
 		err = fmt.Errorf("unknown command %q", cmd)
