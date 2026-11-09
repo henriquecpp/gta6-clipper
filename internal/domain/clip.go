@@ -82,7 +82,11 @@ type Clip struct {
 
 	State  ClipState
 	Moment Moment
-	Window Window
+	// PeakAt is the wall time of the event at the peak (for the preview latency).
+	PeakAt time.Time
+	// LiveOffset is the position of the peak since the start of the broadcast.
+	LiveOffset time.Duration
+	Window     Window
 	// Timeline holds the per-second signal values over Window.
 	Timeline []SignalPoint
 
@@ -117,6 +121,9 @@ type NewClipParams struct {
 	Window   Window
 	Timeline []SignalPoint
 	Source   MediaRef
+	// PeakAt and LiveOffset locate the peak in wall time and in the broadcast.
+	PeakAt     time.Time
+	LiveOffset time.Duration
 }
 
 // NewClip creates a clip in the detected state.
@@ -142,6 +149,8 @@ func NewClip(p NewClipParams, now time.Time) (*Clip, error) {
 		StreamTitle: p.Live.Title,
 		State:       StateDetected,
 		Moment:      p.Moment.Clone(),
+		PeakAt:      p.PeakAt.UTC(),
+		LiveOffset:  p.LiveOffset,
 		Window:      p.Window,
 		Timeline:    slices.Clone(p.Timeline),
 		SourceMedia: p.Source,
