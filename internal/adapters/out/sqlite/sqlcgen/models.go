@@ -46,6 +46,8 @@ type Clip struct {
 	RenderedAt       sql.NullString
 	DeliveredAt      sql.NullString
 	FailedAt         sql.NullString
+	PeakAt           sql.NullString
+	LiveOffsetMs     int64
 }
 
 type Decision struct {

@@ -12,7 +12,7 @@ import (
 )
 
 const getClip = `-- name: GetClip :one
-SELECT id, streamer, stream_id, game, stream_title, state, peak_ms, window_from_ms, window_to_ms, score, signals, source_media, preview_media, final_media, preview_message, headline, post_text, micro_usd, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens, failure_reason, failed_from, decision, decided_at, created_at, updated_at, detected_at, preview_sent_at, approved_at, discarded_at, expired_at, editing_at, rendered_at, delivered_at, failed_at FROM clips WHERE id = ?
+SELECT id, streamer, stream_id, game, stream_title, state, peak_ms, window_from_ms, window_to_ms, score, signals, source_media, preview_media, final_media, preview_message, headline, post_text, micro_usd, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens, failure_reason, failed_from, decision, decided_at, created_at, updated_at, detected_at, preview_sent_at, approved_at, discarded_at, expired_at, editing_at, rendered_at, delivered_at, failed_at, peak_at, live_offset_ms FROM clips WHERE id = ?
 `
 
 func (q *Queries) GetClip(ctx context.Context, id string) (Clip, error) {
@@ -56,12 +56,14 @@ func (q *Queries) GetClip(ctx context.Context, id string) (Clip, error) {
 		&i.RenderedAt,
 		&i.DeliveredAt,
 		&i.FailedAt,
+		&i.PeakAt,
+		&i.LiveOffsetMs,
 	)
 	return i, err
 }
 
 const listClipsByState = `-- name: ListClipsByState :many
-SELECT id, streamer, stream_id, game, stream_title, state, peak_ms, window_from_ms, window_to_ms, score, signals, source_media, preview_media, final_media, preview_message, headline, post_text, micro_usd, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens, failure_reason, failed_from, decision, decided_at, created_at, updated_at, detected_at, preview_sent_at, approved_at, discarded_at, expired_at, editing_at, rendered_at, delivered_at, failed_at FROM clips
+SELECT id, streamer, stream_id, game, stream_title, state, peak_ms, window_from_ms, window_to_ms, score, signals, source_media, preview_media, final_media, preview_message, headline, post_text, micro_usd, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens, failure_reason, failed_from, decision, decided_at, created_at, updated_at, detected_at, preview_sent_at, approved_at, discarded_at, expired_at, editing_at, rendered_at, delivered_at, failed_at, peak_at, live_offset_ms FROM clips
 WHERE state IN (/*SLICE:states*/?)
 ORDER BY created_at, id
 `
@@ -123,6 +125,8 @@ func (q *Queries) ListClipsByState(ctx context.Context, states []string) ([]Clip
 			&i.RenderedAt,
 			&i.DeliveredAt,
 			&i.FailedAt,
+			&i.PeakAt,
+			&i.LiveOffsetMs,
 		); err != nil {
 			return nil, err
 		}
@@ -147,7 +151,8 @@ INSERT INTO clips (
     failure_reason, failed_from, decision, decided_at,
     created_at, updated_at,
     detected_at, preview_sent_at, approved_at, discarded_at, expired_at,
-    editing_at, rendered_at, delivered_at, failed_at
+    editing_at, rendered_at, delivered_at, failed_at,
+    peak_at, live_offset_ms
 ) VALUES (
     ?, ?, ?, ?, ?, ?,
     ?, ?, ?, ?, ?,
@@ -157,7 +162,8 @@ INSERT INTO clips (
     ?, ?, ?, ?,
     ?, ?,
     ?, ?, ?, ?, ?,
-    ?, ?, ?, ?
+    ?, ?, ?, ?,
+    ?, ?
 )
 ON CONFLICT (id) DO UPDATE SET
     streamer           = excluded.streamer,
@@ -195,7 +201,9 @@ ON CONFLICT (id) DO UPDATE SET
     editing_at         = excluded.editing_at,
     rendered_at        = excluded.rendered_at,
     delivered_at       = excluded.delivered_at,
-    failed_at          = excluded.failed_at
+    failed_at          = excluded.failed_at,
+    peak_at            = excluded.peak_at,
+    live_offset_ms     = excluded.live_offset_ms
 `
 
 type UpsertClipParams struct {
@@ -236,6 +244,8 @@ type UpsertClipParams struct {
 	RenderedAt       sql.NullString
 	DeliveredAt      sql.NullString
 	FailedAt         sql.NullString
+	PeakAt           sql.NullString
+	LiveOffsetMs     int64
 }
 
 func (q *Queries) UpsertClip(ctx context.Context, arg UpsertClipParams) error {
@@ -277,6 +287,8 @@ func (q *Queries) UpsertClip(ctx context.Context, arg UpsertClipParams) error {
 		arg.RenderedAt,
 		arg.DeliveredAt,
 		arg.FailedAt,
+		arg.PeakAt,
+		arg.LiveOffsetMs,
 	)
 	return err
 }

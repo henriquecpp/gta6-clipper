@@ -37,7 +37,9 @@ func FullClip(id domain.ClipID, created time.Time) *domain.Clip {
 			{Pos: domain.StreamPos(35 * time.Second), Voice: 0.5, Chat: 1.25},
 			{Pos: domain.StreamPos(36 * time.Second), Voice: 0.75, Chat: 1.5, Clips: 1},
 		},
-		Source: "/pending/" + domain.MediaRef(id) + ".ts",
+		Source:     "/pending/" + domain.MediaRef(id) + ".ts",
+		PeakAt:     created.Add(-30 * time.Second),
+		LiveOffset: 83*time.Minute + 25*time.Second,
 	}, created)
 	if err != nil {
 		panic(fmt.Sprintf("contracttest: invalid fixture: %v", err)) // fixture bug, not a runtime condition

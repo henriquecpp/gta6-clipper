@@ -104,6 +104,8 @@ func (r *Repo) save(ctx context.Context, c *domain.Clip) error {
 		RenderedAt:       st(domain.StateRendered),
 		DeliveredAt:      st(domain.StateDelivered),
 		FailedAt:         st(domain.StateFailed),
+		PeakAt:           nullTime(c.PeakAt),
+		LiveOffsetMs:     c.LiveOffset.Milliseconds(),
 	}
 	if err := r.q.UpsertClip(ctx, p); err != nil {
 		return fmt.Errorf("upsert clip %s: %w", c.ID, err)
@@ -239,6 +241,7 @@ func toDomain(row sqlcgen.Clip) (*domain.Clip, error) {
 			ViewerClips: sig.ViewerClips,
 			Late:        sig.Late,
 		},
+		LiveOffset:     time.Duration(row.LiveOffsetMs) * time.Millisecond,
 		Window:         domain.Window{From: msPos(row.WindowFromMs), To: msPos(row.WindowToMs)},
 		SourceMedia:    domain.MediaRef(row.SourceMedia),
 		PreviewMedia:   domain.MediaRef(row.PreviewMedia),
@@ -273,6 +276,9 @@ func toDomain(row sqlcgen.Clip) (*domain.Clip, error) {
 		c.Timeline = append(c.Timeline, domain.SignalPoint{Pos: msPos(p.PosMS), Voice: p.Voice, Chat: p.Chat, Clips: p.Clips})
 	}
 	if c.DecidedAt, err = parseNullTime(row.DecidedAt); err != nil {
+		return nil, err
+	}
+	if c.PeakAt, err = parseNullTime(row.PeakAt); err != nil {
 		return nil, err
 	}
 	stateCols := map[domain.ClipState]sql.NullString{
