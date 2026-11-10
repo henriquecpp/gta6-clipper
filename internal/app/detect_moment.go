@@ -253,6 +253,11 @@ func (d *DetectMoment) accept(ctx context.Context, s *session, m domain.Moment, 
 
 	s.mu.Lock()
 	live := s.live
+	peakAt := s.tl.WallTime(m.Peak)
+	liveOffset := time.Duration(0)
+	if !s.tl.StreamStart.IsZero() {
+		liveOffset = max(0, peakAt.Sub(s.tl.StreamStart))
+	}
 	s.mu.Unlock()
 
 	attrs := []any{
@@ -286,6 +291,7 @@ func (d *DetectMoment) accept(ctx context.Context, s *session, m domain.Moment, 
 	}
 	clip, err := domain.NewClip(domain.NewClipParams{
 		ID: id, Streamer: s.streamer.Login, Live: live, Moment: m, Window: w, Timeline: timeline, Source: ref,
+		PeakAt: peakAt, LiveOffset: liveOffset,
 	}, d.clock.Now())
 	if err != nil {
 		d.deleteMedia(ctx, ref)

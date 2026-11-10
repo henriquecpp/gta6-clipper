@@ -57,3 +57,20 @@ type MediaCapture interface {
 	// Delete removes a retained file; deleting a missing file is not an error.
 	Delete(ctx context.Context, ref domain.MediaRef) error
 }
+
+// Renderer produces videos from retained media (ffmpeg + NVENC).
+type Renderer interface {
+	// Preview renders a short low-resolution preview next to the source.
+	Preview(ctx context.Context, src domain.MediaRef, spec domain.PreviewSpec) (domain.MediaRef, error)
+}
+
+// Notifier talks to the human approver (Telegram).
+type Notifier interface {
+	// SendPreview sends the preview with Approve/Discard buttons and returns
+	// a reference to the message(s), used later to edit them.
+	SendPreview(ctx context.Context, c *domain.Clip, preview domain.MediaRef) (domain.MessageRef, error)
+	// UpdatePreview edits the preview message(s) to reflect the clip state.
+	UpdatePreview(ctx context.Context, c *domain.Clip) error
+	// SendFailure alerts about a failed clip.
+	SendFailure(ctx context.Context, c *domain.Clip, reason string) error
+}
