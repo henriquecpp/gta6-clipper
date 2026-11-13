@@ -23,3 +23,22 @@ func PreviewWindow(w Window, peak StreamPos, duration time.Duration) (start, len
 	start = max(0, min(start, total-duration))
 	return start, duration
 }
+
+// RenderSpec describes the final vertical video. Times are relative to the
+// start of the retained media.
+type RenderSpec struct {
+	ClipID   ClipID
+	Streamer string
+	Start    time.Duration
+	End      time.Duration
+	Width    int
+	Height   int
+	FPS      int
+	Layout   Layout
+	Stack    StackRegions
+	Headline string
+	Captions []Caption
+	// Words are the transcribed words, used to time the karaoke highlight.
+	Words    []Word
+	MaxBytes int64
+}

@@ -97,8 +97,10 @@ type Clip struct {
 
 	Headline string
 	PostText string
-	Usage    Usage
-	Cost     MicroUSD
+	// Plan is the validated edit, kept so a retry does not pay the editor again.
+	Plan  *EditPlan
+	Usage Usage
+	Cost  MicroUSD
 
 	FailureReason string
 	FailedFrom    ClipState
@@ -244,6 +246,11 @@ func (c *Clip) Clone() *Clip {
 	cp := *c
 	cp.Moment = c.Moment.Clone()
 	cp.Timeline = slices.Clone(c.Timeline)
+	if c.Plan != nil {
+		plan := *c.Plan
+		plan.Captions = slices.Clone(c.Plan.Captions)
+		cp.Plan = &plan
+	}
 	if c.StateTimes != nil {
 		cp.StateTimes = make(map[ClipState]time.Time, len(c.StateTimes))
 		for k, v := range c.StateTimes {
