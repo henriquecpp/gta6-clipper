@@ -11,13 +11,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/in/scheduler"
+	"github.com/henriquecpp/gta6-clipper/internal/adapters/in/telegrambot"
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/in/twitchingest"
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/capture"
+	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/render"
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/sqlite"
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/twitchapi"
 	"github.com/henriquecpp/gta6-clipper/internal/app"
@@ -26,6 +26,8 @@ import (
 	"github.com/henriquecpp/gta6-clipper/internal/platform/config"
 	"github.com/henriquecpp/gta6-clipper/internal/platform/httpserver"
 	"github.com/henriquecpp/gta6-clipper/internal/platform/logging"
+	"github.com/henriquecpp/gta6-clipper/internal/platform/metrics"
+	"github.com/henriquecpp/gta6-clipper/internal/platform/proc"
 )
 
 func configPath() string { return envOr("CLIPPER_CONFIG", "/etc/clipper/config.yaml") }
@@ -79,9 +81,44 @@ func runService(_ []string, stderr io.Writer) error {
 	if err := pruneOrphans(ctx, repo, capt, log); err != nil {
 		log.Warn("prune orphan media", logging.Err(err))
 	}
-	detectMoment := app.NewDetectMoment(detectionConfig(cfg), repo, newClipID, clk, log, app.WithCapture(capt))
 
-	var tasks []scheduler.Task
+	prom := metrics.New()
+	errLog := &app.ErrorLog{}
+	rend := render.New(ctx, render.Config{
+		Encoder:        cfg.Render.Encoder,
+		Threads:        cfg.Concurrency.FFmpegThreadsPerJob,
+		PreviewWorkers: cfg.Concurrency.FFmpegWorkers,
+		FinalWorkers:   cfg.Concurrency.RenderWorkers,
+	}, render.WithLogger(log))
+	prom.SetNVENC(rend.NVENC())
+
+	tg, err := newTelegram(cfg, log)
+	if err != nil {
+		return err
+	}
+	ttl := cfg.Approval.TTL.D()
+	sendPreview := app.NewSendPreview(app.PreviewConfig{
+		Duration: cfg.Render.PreviewDuration.D(),
+		Height:   cfg.Render.PreviewHeight,
+		MaxBytes: int64(cfg.Render.MaxFileBytes),
+	}, repo, rend, tg.notifier, clk, log, prom, errLog)
+	detectMoment := app.NewDetectMoment(detectionConfig(cfg), repo, newClipID, clk, log,
+		app.WithCapture(capt), app.WithDetectMetrics(prom),
+		app.WithClipHandler(func(ctx context.Context, c *domain.Clip) {
+			if err := sendPreview.Execute(ctx, c.ID); err != nil {
+				log.Warn("preview failed", slog.String("clip_id", string(c.ID)), logging.Err(err))
+			}
+		}))
+	decisions := app.NewDecisions(repo, capt, tg.notifier, clk, log, ttl, app.WithDecisionMetrics(prom))
+
+	gpu := prom.NewGPUSampler(func(ctx context.Context) ([]byte, error) {
+		return proc.Run(ctx, nil, "nvidia-smi", "--query-gpu=utilization.gpu,memory.used", "--format=csv,noheader,nounits")
+	}, log)
+	tasks := []scheduler.Task{
+		{Name: "expire-previews", Interval: time.Minute, Immediate: true, Run: decisions.ExpireTask},
+		{Name: "gpu-metrics", Interval: 15 * time.Second, Immediate: true, Run: gpu.Sample},
+	}
+	var lives func() []domain.LiveStream
 	var supervisor *twitchingest.Supervisor
 	if cfg.Secrets.HasTwitch() {
 		tw := twitchapi.New(cfg.Secrets.TwitchClientID, cfg.Secrets.TwitchClientSecret, twitchapi.WithLogger(log))
@@ -107,7 +144,12 @@ func runService(_ []string, stderr io.Writer) error {
 			MaxStreams:       cfg.Concurrency.MaxStreams,
 		}, detectMoment, tw, log, supOpts...)
 		monitor := app.NewMonitorLives(tw, streamers, supervisor, log)
+		lives = monitor.Live
 		tasks = append(tasks,
+			scheduler.Task{Name: "streams-gauge", Interval: 15 * time.Second, Run: func(context.Context) error {
+				prom.SetStreamsLive(supervisor.Running())
+				return nil
+			}},
 			scheduler.Task{Name: "live-poll", Interval: cfg.Twitch.LivePollInterval.D(), Jitter: 0.1, Immediate: true, Run: monitor.Poll},
 			scheduler.Task{Name: "token-validate", Interval: time.Hour, Jitter: 0.05, Run: func(ctx context.Context) error {
 				errs := []error{tw.ValidateApp(ctx)}
@@ -122,17 +164,22 @@ func runService(_ []string, stderr io.Writer) error {
 		log.Warn("TWITCH_CLIENT_ID/TWITCH_CLIENT_SECRET missing: live monitoring disabled (degraded mode)")
 	}
 
-	reg := prometheus.NewRegistry()
+	status := app.NewStatus(repo, clk, ttl, lives, nil, errLog)
+
 	srv := httpserver.New(cfg.HTTP.Addr,
 		httpserver.WithLogger(log),
 		httpserver.WithShutdownTimeout(cfg.HTTP.ShutdownTimeout.D()),
-		httpserver.WithMetrics(promhttp.HandlerFor(reg, promhttp.HandlerOpts{Registry: reg})))
+		httpserver.WithMetrics(prom.Handler()))
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return srv.Run(gctx) })
 	g.Go(func() error { return scheduler.New(log, tasks...).Run(gctx) })
 	if supervisor != nil {
 		g.Go(func() error { return supervisor.Run(gctx) })
+	}
+	if tg.bot != nil {
+		bot := telegrambot.New(tg.bot, cfg.Secrets.TelegramAllowedChatIDs, decisions, status, log)
+		g.Go(func() error { return bot.Run(gctx) })
 	}
 	srv.SetReady(true)
 	log.Info("clipper started")
