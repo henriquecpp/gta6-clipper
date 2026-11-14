@@ -34,6 +34,9 @@ type Config struct {
 	// PreviewWorkers and FinalWorkers bound concurrent ffmpeg jobs (worker pools).
 	PreviewWorkers int
 	FinalWorkers   int
+	// OutputDir receives the final videos.
+	OutputDir string
+	Style     ASSStyle
 }
 
 // runFunc runs ffmpeg with args (replaced in tests).
@@ -45,6 +48,7 @@ type Renderer struct {
 	encoder  string
 	log      *slog.Logger
 	run      runFunc
+	now      func() time.Time
 	previews chan struct{}
 	finals   chan struct{}
 }
@@ -57,6 +61,9 @@ type Option func(*Renderer)
 // WithLogger sets the logger.
 func WithLogger(l *slog.Logger) Option { return func(r *Renderer) { r.log = l } }
 
+// withNow replaces the clock used to name outputs (tests).
+func withNow(f func() time.Time) Option { return func(r *Renderer) { r.now = f } }
+
 // withRunner replaces the ffmpeg runner (tests).
 func withRunner(f runFunc) Option { return func(r *Renderer) { r.run = f } }
 
@@ -68,6 +75,7 @@ func New(ctx context.Context, cfg Config, opts ...Option) *Renderer {
 	r := &Renderer{
 		cfg:      cfg,
 		log:      slog.Default(),
+		now:      time.Now,
 		previews: make(chan struct{}, max(cfg.PreviewWorkers, 1)),
 		finals:   make(chan struct{}, max(cfg.FinalWorkers, 1)),
 	}
@@ -137,7 +145,9 @@ func previewArgs(src, out string, spec domain.PreviewSpec, encoder string, threa
 		"-ss", secs(spec.Start),
 		"-i", src,
 		"-t", secs(spec.Duration),
-		"-vf", fmt.Sprintf("scale=-2:%d,format=yuv420p", spec.Height),
+		// setpts: MPEG-TS input keeps its 1.4 s start offset on the filtered
+		// video otherwise, shifting it against the audio.
+		"-vf", fmt.Sprintf("setpts=PTS-STARTPTS,scale=-2:%d,format=yuv420p", spec.Height),
 	}
 	if encoder == EncoderNVENC {
 		args = append(args, "-c:v", EncoderNVENC, "-preset", "p4", "-rc", "vbr", "-cq", "30", "-b:v", "0",

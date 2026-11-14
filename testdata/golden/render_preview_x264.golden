@@ -9,7 +9,7 @@ error
 -t
 40.000
 -vf
-scale=-2:480,format=yuv420p
+setpts=PTS-STARTPTS,scale=-2:480,format=yuv420p
 -c:v
 libx264
 -preset

@@ -10,3 +10,10 @@ func TestGPUPreviewNVENC(t *testing.T) {
 		t.Fatal("h264_nvenc not available in the container (check the `video` capability)")
 	}
 }
+
+// TestGPUFinalNVENC renders the final 9:16 video with the real NVENC encoder.
+func TestGPUFinalNVENC(t *testing.T) {
+	if r := renderFinal(t, EncoderNVENC, "blur"); !r.NVENC() {
+		t.Fatal("h264_nvenc not available")
+	}
+}

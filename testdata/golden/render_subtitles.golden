@@ -1,0 +1,19 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+WrapStyle: 2
+ScaledBorderAndShadow: yes
+YCbCr Matrix: TV.709
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Caption,Noto Sans,56,&H0000E5FF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,5,2,2,59,130,480,1
+Style: Headline,Noto Sans,50,&H00FFFFFF,&H00FFFFFF,&H64000000,&H00000000,-1,0,0,0,100,100,0,0,3,16,0,8,59,130,154,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 1,0:00:00.00,0:00:30.85,Headline,,0,0,0,,Ele pulou da ponte\Ne caiu em cima\Nda viatura!
+Dialogue: 0,0:00:01.35,0:00:02.95,Caption,,0,0,0,,{\k25}no {\k45}way, {\k25}did {\k20}you {\k45}see
+Dialogue: 0,0:00:03.35,0:00:06.27,Caption,,0,0,0,,{\k23}Ele {\k38}pulou {\k15}da {\k38}ponte {\k8}e {\k31}caiu\N{\k23}bem {\k15}em {\k31}cima {\k15}da {\k54}viatura
+Dialogue: 0,0:00:06.27,0:00:08.35,Caption,,0,0,0,,{\k15}da {\k62}polícia, {\k23}que {\k54}loucura\N{\k54}(total)

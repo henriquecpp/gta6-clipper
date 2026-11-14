@@ -77,3 +77,33 @@ func TestPreviewX264(t *testing.T) {
 		t.Fatal("libx264 requested")
 	}
 }
+
+func renderFinal(t *testing.T, encoder string, layout domain.Layout) *Renderer {
+	t.Helper()
+	out := t.TempDir()
+	r := New(context.Background(), Config{Encoder: encoder, Threads: 4, OutputDir: out, Style: ASSStyle{Font: "Noto Sans", MaxLineChars: 28}},
+		WithLogger(slog.New(slog.DiscardHandler)))
+	spec := domain.RenderSpec{
+		ClipID: "it-0001", Streamer: "sample", Start: 6 * time.Second, End: 26 * time.Second,
+		Width: 1080, Height: 1920, FPS: 30, Layout: layout,
+		Stack:    domain.StackRegions{Facecam: domain.Rect{X: 0.7, W: 0.3, H: 0.3}, Gameplay: domain.Rect{W: 1, H: 1}},
+		Headline: "Ele pulou da ponte! Ação é acentuação",
+		Captions: []domain.Caption{{Start: 8 * time.Second, End: 11 * time.Second, Text: "Vocês viram isso? Não acredito"}},
+		MaxBytes: 45 << 20,
+	}
+	ref, err := r.Final(context.Background(), copySample(t), spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dur, w, h := probe(t, string(ref))
+	if w != 1080 || h != 1920 || dur < 19.5 || dur > 20.5 {
+		t.Fatalf("final %dx%d %.2fs", w, h, dur)
+	}
+	return r
+}
+
+func TestFinalX264Layouts(t *testing.T) {
+	for _, l := range []domain.Layout{domain.LayoutBlur, domain.LayoutStack, domain.LayoutCrop} {
+		t.Run(string(l), func(t *testing.T) { renderFinal(t, EncoderX264, l) })
+	}
+}
