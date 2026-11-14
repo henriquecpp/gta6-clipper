@@ -84,6 +84,12 @@ func statusLine(c *domain.Clip) string {
 	return ""
 }
 
+// finalCaption is the caption of the delivered video.
+func finalCaption(c *domain.Clip, post domain.Post) string {
+	return truncate(fmt.Sprintf("✅ <b>%s</b>\n%s — %s\nTexto do post na próxima mensagem. Nada foi publicado.",
+		esc(post.Headline), esc(c.Streamer), esc(c.Game)), maxCaption)
+}
+
 // failureText is the alert sent when a clip fails.
 func failureText(c *domain.Clip, reason string) string {
 	return truncate(fmt.Sprintf("⚠️ <b>Falha no clipe de %s</b>\nClipe: <code>%s</code>\nEtapa: %s\nMotivo: %s",

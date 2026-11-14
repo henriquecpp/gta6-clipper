@@ -179,3 +179,39 @@ func TestRedactToken(t *testing.T) {
 		t.Fatal("redact must keep unrelated errors")
 	}
 }
+
+func TestSendFinalAndAlert(t *testing.T) {
+	srv := telegramtest.New()
+	defer srv.Close()
+	n := NewNotifier(newTestBot(t, srv), []int64{111}, time.Hour, slog.New(slog.DiscardHandler))
+	video := filepath.Join(t.TempDir(), "final.mp4")
+	if err := os.WriteFile(video, make([]byte, 4096), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := testClip()
+	post := domain.Post{Headline: "Ele pulou!", Text: "Insano #gta6 streamer<x>"}
+	if err := n.SendFinal(context.Background(), c, domain.MediaRef(video), post); err != nil {
+		t.Fatal(err)
+	}
+	vids, msgs := srv.Calls("sendVideo"), srv.Calls("sendMessage")
+	if len(vids) != 1 || vids[0].FileBytes != 4096 || !strings.Contains(vids[0].Params["caption"], "Ele pulou!") || vids[0].Params["reply_markup"] != "" {
+		t.Fatalf("video = %+v", vids)
+	}
+	if len(msgs) != 1 || msgs[0].Params["text"] != post.Text || msgs[0].Params["parse_mode"] != "" {
+		t.Fatalf("post text = %+v", msgs)
+	}
+	if err := n.SendAlert(context.Background(), c, "custo > limite"); err != nil {
+		t.Fatal(err)
+	}
+	if a := srv.Calls("sendMessage"); len(a) != 2 || !strings.Contains(a[1].Params["text"], "custo &gt; limite") {
+		t.Fatalf("alert = %+v", a)
+	}
+	srv.Fail("sendVideo", "Request Entity Too Large")
+	if err := n.SendFinal(context.Background(), c, domain.MediaRef(video), post); err == nil {
+		t.Fatal("expected error")
+	}
+	srv.Fail("sendMessage", "Forbidden")
+	if err := n.SendAlert(context.Background(), c, "x"); err == nil {
+		t.Fatal("expected error")
+	}
+}

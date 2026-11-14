@@ -85,6 +85,10 @@ func (n *Notifier) SendPreview(ctx context.Context, c *domain.Clip, preview doma
 }
 
 func (n *Notifier) sendVideo(ctx context.Context, chat int64, path, caption string, kb *telego.InlineKeyboardMarkup) (int, error) {
+	var markup telego.ReplyMarkup
+	if kb != nil {
+		markup = kb
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return 0, fmt.Errorf("open %s: %w", path, err)
@@ -96,7 +100,7 @@ func (n *Notifier) sendVideo(ctx context.Context, chat int64, path, caption stri
 		Caption:           caption,
 		ParseMode:         telego.ModeHTML,
 		SupportsStreaming: true,
-		ReplyMarkup:       kb,
+		ReplyMarkup:       markup,
 	})
 	if err != nil {
 		return 0, err
@@ -142,6 +146,48 @@ func (n *Notifier) SendFailure(ctx context.Context, c *domain.Clip, reason strin
 	}
 	if len(errs) > 0 && len(errs) == len(n.chats) {
 		return fmt.Errorf("send failure alert: %w", errors.Join(errs...))
+	}
+	return nil
+}
+
+// SendFinal sends the final video (headline as caption) and then the post
+// text as a plain message, easy to copy. Nothing is published anywhere.
+func (n *Notifier) SendFinal(ctx context.Context, c *domain.Clip, video domain.MediaRef, post domain.Post) error {
+	var errs []error
+	delivered := 0
+	for _, chat := range n.chats {
+		if _, err := n.sendVideo(ctx, chat, string(video), finalCaption(c, post), nil); err != nil {
+			errs = append(errs, fmt.Errorf("chat %d: %w", chat, n.redact(err)))
+			continue
+		}
+		delivered++
+		if _, err := n.bot.SendMessage(ctx, &telego.SendMessageParams{ChatID: telego.ChatID{ID: chat}, Text: truncate(post.Text, 4000)}); err != nil {
+			errs = append(errs, fmt.Errorf("chat %d post text: %w", chat, n.redact(err)))
+		}
+	}
+	if delivered == 0 {
+		return fmt.Errorf("send final video: %w", errors.Join(errs...))
+	}
+	if len(errs) > 0 {
+		n.log.Warn("final video not fully delivered", slog.String("clip_id", string(c.ID)), slog.String("err", errors.Join(errs...).Error()))
+	}
+	return nil
+}
+
+// SendAlert sends an informational message about a clip.
+func (n *Notifier) SendAlert(ctx context.Context, c *domain.Clip, text string) error {
+	var errs []error
+	for _, chat := range n.chats {
+		_, err := n.bot.SendMessage(ctx, &telego.SendMessageParams{
+			ChatID: telego.ChatID{ID: chat}, ParseMode: telego.ModeHTML,
+			Text: truncate(fmt.Sprintf("%s\nClipe: <code>%s</code> (%s)", esc(text), esc(string(c.ID)), esc(c.Streamer)), 4000),
+		})
+		if err != nil {
+			errs = append(errs, n.redact(err))
+		}
+	}
+	if len(errs) > 0 && len(errs) == len(n.chats) {
+		return fmt.Errorf("send alert: %w", errors.Join(errs...))
 	}
 	return nil
 }
