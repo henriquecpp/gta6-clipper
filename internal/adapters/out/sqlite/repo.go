@@ -65,6 +65,10 @@ func (r *Repo) save(ctx context.Context, c *domain.Clip) error {
 	if err != nil {
 		return err
 	}
+	plan, err := encodePlan(c.Plan)
+	if err != nil {
+		return fmt.Errorf("encode plan of clip %s: %w", c.ID, err)
+	}
 	st := func(s domain.ClipState) sql.NullString { return nullTime(c.StateTimes[s]) }
 	p := sqlcgen.UpsertClipParams{
 		ID:               string(c.ID),
@@ -106,6 +110,7 @@ func (r *Repo) save(ctx context.Context, c *domain.Clip) error {
 		FailedAt:         st(domain.StateFailed),
 		PeakAt:           nullTime(c.PeakAt),
 		LiveOffsetMs:     c.LiveOffset.Milliseconds(),
+		EditPlan:         plan,
 	}
 	if err := r.q.UpsertClip(ctx, p); err != nil {
 		return fmt.Errorf("upsert clip %s: %w", c.ID, err)
@@ -281,6 +286,9 @@ func toDomain(row sqlcgen.Clip) (*domain.Clip, error) {
 	if c.PeakAt, err = parseNullTime(row.PeakAt); err != nil {
 		return nil, err
 	}
+	if c.Plan, err = decodePlan(row.EditPlan); err != nil {
+		return nil, fmt.Errorf("decode plan of clip %s: %w", row.ID, err)
+	}
 	stateCols := map[domain.ClipState]sql.NullString{
 		domain.StateDetected:    row.DetectedAt,
 		domain.StatePreviewSent: row.PreviewSentAt,
@@ -302,6 +310,49 @@ func toDomain(row sqlcgen.Clip) (*domain.Clip, error) {
 		}
 	}
 	return c, nil
+}
+
+type planJSON struct {
+	StartMS   int64         `json:"start_ms"`
+	EndMS     int64         `json:"end_ms"`
+	Headline  string        `json:"headline"`
+	Captions  []captionJSON `json:"captions"`
+	PostText  string        `json:"post_text"`
+	Reasoning string        `json:"reasoning,omitempty"`
+}
+
+type captionJSON struct {
+	StartMS int64  `json:"start_ms"`
+	EndMS   int64  `json:"end_ms"`
+	Text    string `json:"text"`
+}
+
+func encodePlan(p *domain.EditPlan) (string, error) {
+	if p == nil {
+		return "", nil
+	}
+	j := planJSON{StartMS: p.Start.Milliseconds(), EndMS: p.End.Milliseconds(), Headline: p.Headline, PostText: p.PostText, Reasoning: p.Reasoning}
+	for _, c := range p.Captions {
+		j.Captions = append(j.Captions, captionJSON{StartMS: c.Start.Milliseconds(), EndMS: c.End.Milliseconds(), Text: c.Text})
+	}
+	b, err := json.Marshal(j)
+	return string(b), err
+}
+
+func decodePlan(s string) (*domain.EditPlan, error) {
+	if s == "" {
+		return nil, nil
+	}
+	var j planJSON
+	if err := json.Unmarshal([]byte(s), &j); err != nil {
+		return nil, err
+	}
+	ms := func(v int64) time.Duration { return time.Duration(v) * time.Millisecond }
+	p := &domain.EditPlan{Start: ms(j.StartMS), End: ms(j.EndMS), Headline: j.Headline, PostText: j.PostText, Reasoning: j.Reasoning}
+	for _, c := range j.Captions {
+		p.Captions = append(p.Captions, domain.Caption{Start: ms(c.StartMS), End: ms(c.EndMS), Text: c.Text})
+	}
+	return p, nil
 }
 
 func msPos(ms int64) domain.StreamPos { return domain.StreamPos(time.Duration(ms) * time.Millisecond) }
