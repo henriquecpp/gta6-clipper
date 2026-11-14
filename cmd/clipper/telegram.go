@@ -62,3 +62,7 @@ func (disabledNotifier) SendPreview(context.Context, *domain.Clip, domain.MediaR
 }
 func (disabledNotifier) UpdatePreview(context.Context, *domain.Clip) error       { return nil }
 func (disabledNotifier) SendFailure(context.Context, *domain.Clip, string) error { return nil }
+func (disabledNotifier) SendFinal(context.Context, *domain.Clip, domain.MediaRef, domain.Post) error {
+	return errTelegramDisabled
+}
+func (disabledNotifier) SendAlert(context.Context, *domain.Clip, string) error { return nil }

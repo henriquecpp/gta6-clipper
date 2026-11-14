@@ -62,6 +62,20 @@ type MediaCapture interface {
 type Renderer interface {
 	// Preview renders a short low-resolution preview next to the source.
 	Preview(ctx context.Context, src domain.MediaRef, spec domain.PreviewSpec) (domain.MediaRef, error)
+	// Final renders the vertical video with burned-in subtitles.
+	Final(ctx context.Context, src domain.MediaRef, spec domain.RenderSpec) (domain.MediaRef, error)
+}
+
+// Transcriber transcribes retained media locally (whisper.cpp on the GPU).
+type Transcriber interface {
+	Transcribe(ctx context.Context, src domain.MediaRef) (domain.Transcript, error)
+}
+
+// Editor asks the model for the cut, headline, captions and post text. It
+// returns the raw proposal; validation is a domain rule. A malformed answer
+// (no tool call, invalid JSON) is reported as domain.ErrInvalidEditPlan.
+type Editor interface {
+	Plan(ctx context.Context, req domain.EditRequest) (domain.EditProposal, domain.Usage, error)
 }
 
 // Notifier talks to the human approver (Telegram).
@@ -73,4 +87,8 @@ type Notifier interface {
 	UpdatePreview(ctx context.Context, c *domain.Clip) error
 	// SendFailure alerts about a failed clip.
 	SendFailure(ctx context.Context, c *domain.Clip, reason string) error
+	// SendFinal delivers the final video and the suggested post text.
+	SendFinal(ctx context.Context, c *domain.Clip, video domain.MediaRef, post domain.Post) error
+	// SendAlert sends an informational alert about a clip (e.g. cost above the limit).
+	SendAlert(ctx context.Context, c *domain.Clip, text string) error
 }

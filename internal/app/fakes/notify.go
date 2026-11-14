@@ -14,7 +14,9 @@ import (
 type Renderer struct {
 	mu         sync.Mutex
 	PreviewErr error
+	FinalErr   error
 	Previews   []domain.PreviewSpec
+	Finals     []domain.RenderSpec
 	// Media, when set, registers produced files as existing.
 	Media *MediaCapture
 }
@@ -39,14 +41,31 @@ func (r *Renderer) Preview(ctx context.Context, src domain.MediaRef, spec domain
 	return ref, nil
 }
 
+// Final returns /output/<clip>.mp4.
+func (r *Renderer) Final(ctx context.Context, _ domain.MediaRef, spec domain.RenderSpec) (domain.MediaRef, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.FinalErr != nil {
+		return "", r.FinalErr
+	}
+	r.Finals = append(r.Finals, spec)
+	return domain.MediaRef("/output/" + string(spec.ClipID) + ".mp4"), nil
+}
+
 // Notifier records what would be sent to Telegram.
 type Notifier struct {
 	mu        sync.Mutex
 	SendErr   error
 	UpdateErr error
+	FinalErr  error
 	Sent      []domain.ClipID
 	Updates   []domain.ClipState
 	Failures  []string
+	Finals    []domain.Post
+	Alerts    []string
 }
 
 var _ app.Notifier = (*Notifier)(nil)
@@ -78,6 +97,28 @@ func (n *Notifier) SendFailure(_ context.Context, c *domain.Clip, reason string)
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.Failures = append(n.Failures, string(c.ID)+": "+reason)
+	return nil
+}
+
+// SendFinal records the delivery.
+func (n *Notifier) SendFinal(ctx context.Context, _ *domain.Clip, _ domain.MediaRef, post domain.Post) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.FinalErr != nil {
+		return n.FinalErr
+	}
+	n.Finals = append(n.Finals, post)
+	return nil
+}
+
+// SendAlert records the alert.
+func (n *Notifier) SendAlert(_ context.Context, c *domain.Clip, text string) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.Alerts = append(n.Alerts, string(c.ID)+": "+text)
 	return nil
 }
 
