@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Regenerates the speech samples in testdata/ using the Windows TTS (System.Speech).
 
