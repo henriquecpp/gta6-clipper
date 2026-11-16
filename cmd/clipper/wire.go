@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/claude"
 	"github.com/henriquecpp/gta6-clipper/internal/app"
 	"github.com/henriquecpp/gta6-clipper/internal/domain"
 	"github.com/henriquecpp/gta6-clipper/internal/domain/detect"
@@ -60,4 +64,55 @@ func detectionConfig(c *config.Config) app.DetectionConfig {
 		BufferDuration: c.Capture.BufferDuration.D(),
 		RetainMargin:   c.Capture.SegmentDuration.D() + time.Second,
 	}
+}
+
+// produceConfig maps the render/editor settings to the production use case.
+func produceConfig(c *config.Config) app.ProduceConfig {
+	streamers := map[string]domain.Streamer{}
+	for _, s := range c.DomainStreamers() {
+		streamers[s.Login] = s
+	}
+	p := c.Editor.Pricing
+	return app.ProduceConfig{
+		MinDuration:      c.Render.MinDuration.D(),
+		MaxDuration:      c.Render.MaxDuration.D(),
+		PeakTolerance:    c.Editor.PeakTolerance.D(),
+		HeadlineMaxChars: c.Render.HeadlineMaxChars,
+		OutputLanguage:   "pt-BR",
+		SnapMargin:       150 * time.Millisecond,
+		Pricing: domain.Pricing{
+			Input: domain.USDToMicro(p.Input), Output: domain.USDToMicro(p.Output),
+			CacheWrite: domain.USDToMicro(p.CacheWrite), CacheRead: domain.USDToMicro(p.CacheRead),
+		},
+		MaxCost:   domain.USDToMicro(c.Editor.MaxCostPerClipUSD),
+		Width:     c.Render.Width,
+		Height:    c.Render.Height,
+		FPS:       c.Render.FPS,
+		MaxBytes:  int64(c.Render.MaxFileBytes),
+		Streamers: streamers,
+	}
+}
+
+// newEditor builds the Claude editor, or a disabled one (degraded mode, ADR 0016).
+func newEditor(c *config.Config, log *slog.Logger) app.Editor {
+	if !c.Secrets.HasAnthropic() {
+		log.Warn("ANTHROPIC_API_KEY/ANTHROPIC_MODEL missing: approved clips will fail at the edit stage (degraded mode)")
+		return disabledEditor{}
+	}
+	if c.Editor.Pricing == (config.Pricing{}) {
+		log.Warn("editor.pricing is zero: costs will be recorded as $0 (fill in the current prices of ANTHROPIC_MODEL)")
+	}
+	return claude.New(claude.Config{
+		APIKey:     c.Secrets.AnthropicAPIKey,
+		Model:      c.Secrets.AnthropicModel,
+		MaxTokens:  c.Editor.MaxTokens,
+		Timeout:    c.Editor.Timeout.D(),
+		ToolChoice: c.Editor.ToolChoice,
+	})
+}
+
+type disabledEditor struct{}
+
+func (disabledEditor) Plan(context.Context, domain.EditRequest) (domain.EditProposal, domain.Usage, error) {
+	return domain.EditProposal{}, domain.Usage{}, errors.New("anthropic is not configured (ANTHROPIC_API_KEY / ANTHROPIC_MODEL)")
 }

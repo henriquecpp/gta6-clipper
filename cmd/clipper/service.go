@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -20,6 +21,7 @@ import (
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/render"
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/sqlite"
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/twitchapi"
+	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/whisper"
 	"github.com/henriquecpp/gta6-clipper/internal/app"
 	"github.com/henriquecpp/gta6-clipper/internal/domain"
 	"github.com/henriquecpp/gta6-clipper/internal/platform/clock"
@@ -89,6 +91,8 @@ func runService(_ []string, stderr io.Writer) error {
 		Threads:        cfg.Concurrency.FFmpegThreadsPerJob,
 		PreviewWorkers: cfg.Concurrency.FFmpegWorkers,
 		FinalWorkers:   cfg.Concurrency.RenderWorkers,
+		OutputDir:      cfg.Render.OutputDir,
+		Style:          render.ASSStyle{Font: cfg.Render.Font, MaxLineChars: cfg.Render.MaxLineChars},
 	}, render.WithLogger(log))
 	prom.SetNVENC(rend.NVENC())
 
@@ -109,7 +113,15 @@ func runService(_ []string, stderr io.Writer) error {
 				log.Warn("preview failed", slog.String("clip_id", string(c.ID)), logging.Err(err))
 			}
 		}))
-	decisions := app.NewDecisions(repo, capt, tg.notifier, clk, log, ttl, app.WithDecisionMetrics(prom))
+	transcriber := whisper.NewTranscriber(whisper.NewClient(cfg.Whisper.URL, &http.Client{Timeout: cfg.Whisper.Timeout.D()}),
+		whisper.WithWorkers(cfg.Concurrency.TranscribeWorkers), whisper.WithTimeout(cfg.Whisper.Timeout.D()))
+	produce := app.NewProduceFinalClip(produceConfig(cfg), repo, transcriber, newEditor(cfg, log), rend, tg.notifier, capt, clk, log, prom, errLog)
+	queue := app.NewProduceQueue(produce.Execute, max(cfg.Concurrency.TranscribeWorkers, cfg.Concurrency.RenderWorkers), 100,
+		cfg.HTTP.ShutdownTimeout.D(), log, prom)
+	decisions := app.NewDecisions(repo, capt, tg.notifier, clk, log, ttl, app.WithDecisionMetrics(prom),
+		app.WithProducer(func(ctx context.Context, id domain.ClipID) { queue.Submit(ctx, id) }))
+	retry := app.NewRetryClip(repo, tg.notifier, clk, log, prom, queue.Submit)
+	recoverPending := app.NewRecoverPending(repo, sendPreview.Execute, queue.Submit, log)
 
 	gpu := prom.NewGPUSampler(func(ctx context.Context) ([]byte, error) {
 		return proc.Run(ctx, nil, "nvidia-smi", "--query-gpu=utilization.gpu,memory.used", "--format=csv,noheader,nounits")
@@ -164,7 +176,7 @@ func runService(_ []string, stderr io.Writer) error {
 		log.Warn("TWITCH_CLIENT_ID/TWITCH_CLIENT_SECRET missing: live monitoring disabled (degraded mode)")
 	}
 
-	status := app.NewStatus(repo, clk, ttl, lives, nil, errLog)
+	status := app.NewStatus(repo, clk, ttl, lives, queue.Depth, errLog)
 
 	srv := httpserver.New(cfg.HTTP.Addr,
 		httpserver.WithLogger(log),
@@ -173,12 +185,19 @@ func runService(_ []string, stderr io.Writer) error {
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return srv.Run(gctx) })
+	g.Go(func() error { return queue.Run(gctx) })
+	g.Go(func() error {
+		if _, err := recoverPending.Execute(gctx); err != nil {
+			log.Warn("recover pending clips", logging.Err(err))
+		}
+		return nil
+	})
 	g.Go(func() error { return scheduler.New(log, tasks...).Run(gctx) })
 	if supervisor != nil {
 		g.Go(func() error { return supervisor.Run(gctx) })
 	}
 	if tg.bot != nil {
-		bot := telegrambot.New(tg.bot, cfg.Secrets.TelegramAllowedChatIDs, decisions, status, log)
+		bot := telegrambot.New(tg.bot, cfg.Secrets.TelegramAllowedChatIDs, decisions, status, log, telegrambot.WithRetry(retry.Execute))
 		g.Go(func() error { return bot.Run(gctx) })
 	}
 	srv.SetReady(true)
