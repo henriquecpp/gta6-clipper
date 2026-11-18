@@ -19,6 +19,7 @@ import (
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/in/twitchingest"
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/capture"
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/render"
+	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/resilience"
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/sqlite"
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/twitchapi"
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/whisper"
@@ -100,27 +101,33 @@ func runService(_ []string, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	// Retry/backoff, error metrics and logs around every external port (Decorator).
+	rdeps := resilience.Deps{Log: log, Metrics: prom}
+	media := resilience.NewMediaCapture(capt, resilience.FFmpegPolicy, rdeps)
+	renderer := resilience.NewRenderer(rend, resilience.FFmpegPolicy, rdeps)
+	notifier := resilience.NewNotifier(tg.notifier, resilience.NetworkPolicy, rdeps)
 	ttl := cfg.Approval.TTL.D()
 	sendPreview := app.NewSendPreview(app.PreviewConfig{
 		Duration: cfg.Render.PreviewDuration.D(),
 		Height:   cfg.Render.PreviewHeight,
 		MaxBytes: int64(cfg.Render.MaxFileBytes),
-	}, repo, rend, tg.notifier, clk, log, prom, errLog)
+	}, repo, renderer, notifier, clk, log, prom, errLog)
 	detectMoment := app.NewDetectMoment(detectionConfig(cfg), repo, newClipID, clk, log,
-		app.WithCapture(capt), app.WithDetectMetrics(prom),
+		app.WithCapture(media), app.WithDetectMetrics(prom),
 		app.WithClipHandler(func(ctx context.Context, c *domain.Clip) {
 			if err := sendPreview.Execute(ctx, c.ID); err != nil {
 				log.Warn("preview failed", slog.String("clip_id", string(c.ID)), logging.Err(err))
 			}
 		}))
-	transcriber := whisper.NewTranscriber(whisper.NewClient(cfg.Whisper.URL, &http.Client{Timeout: cfg.Whisper.Timeout.D()}),
-		whisper.WithWorkers(cfg.Concurrency.TranscribeWorkers), whisper.WithTimeout(cfg.Whisper.Timeout.D()))
-	produce := app.NewProduceFinalClip(produceConfig(cfg), repo, transcriber, newEditor(cfg, log), rend, tg.notifier, capt, clk, log, prom, errLog)
+	transcriber := resilience.NewTranscriber(whisper.NewTranscriber(whisper.NewClient(cfg.Whisper.URL, &http.Client{Timeout: cfg.Whisper.Timeout.D()}),
+		whisper.WithWorkers(cfg.Concurrency.TranscribeWorkers), whisper.WithTimeout(cfg.Whisper.Timeout.D())), resilience.WhisperPolicy, rdeps)
+	editor := resilience.NewEditor(newEditor(cfg, log), resilience.EditorPolicy, rdeps)
+	produce := app.NewProduceFinalClip(produceConfig(cfg), repo, transcriber, editor, renderer, notifier, media, clk, log, prom, errLog)
 	queue := app.NewProduceQueue(produce.Execute, max(cfg.Concurrency.TranscribeWorkers, cfg.Concurrency.RenderWorkers), 100,
 		cfg.HTTP.ShutdownTimeout.D(), log, prom)
-	decisions := app.NewDecisions(repo, capt, tg.notifier, clk, log, ttl, app.WithDecisionMetrics(prom),
+	decisions := app.NewDecisions(repo, media, notifier, clk, log, ttl, app.WithDecisionMetrics(prom),
 		app.WithProducer(func(ctx context.Context, id domain.ClipID) { queue.Submit(ctx, id) }))
-	retry := app.NewRetryClip(repo, tg.notifier, clk, log, prom, queue.Submit)
+	retry := app.NewRetryClip(repo, notifier, clk, log, prom, queue.Submit)
 	recoverPending := app.NewRecoverPending(repo, sendPreview.Execute, queue.Submit, log)
 
 	gpu := prom.NewGPUSampler(func(ctx context.Context) ([]byte, error) {
@@ -134,6 +141,7 @@ func runService(_ []string, stderr io.Writer) error {
 	var supervisor *twitchingest.Supervisor
 	if cfg.Secrets.HasTwitch() {
 		tw := twitchapi.New(cfg.Secrets.TwitchClientID, cfg.Secrets.TwitchClientSecret, twitchapi.WithLogger(log))
+		platform := resilience.NewPlatform(tw, resilience.NetworkPolicy, rdeps)
 		userTokens := tw.NewUserTokens(cfg.Twitch.TokenFile)
 		if err := userTokens.Load(); err == nil {
 			err = userTokens.Validate(ctx)
@@ -154,8 +162,8 @@ func runService(_ []string, stderr io.Writer) error {
 			ClipPollInterval: cfg.Detection.Clips.PollInterval.D(),
 			ClipLookback:     cfg.Capture.BufferDuration.D(),
 			MaxStreams:       cfg.Concurrency.MaxStreams,
-		}, detectMoment, tw, log, supOpts...)
-		monitor := app.NewMonitorLives(tw, streamers, supervisor, log)
+		}, detectMoment, platform, log, supOpts...)
+		monitor := app.NewMonitorLives(platform, streamers, supervisor, log)
 		lives = monitor.Live
 		tasks = append(tasks,
 			scheduler.Task{Name: "streams-gauge", Interval: 15 * time.Second, Run: func(context.Context) error {
