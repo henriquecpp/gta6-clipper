@@ -3,8 +3,6 @@ version: "3"
 
 vars:
   COMPOSE: docker compose
-  GO_IMAGE: golang:1.27.4-trixie
-  RACE_IN_DOCKER: '{{if eq OS "windows"}}true{{else}}false{{end}}'
 
 tasks:
   default:
@@ -34,15 +32,11 @@ tasks:
       - go test ./...
 
   test:race:
-    desc: Unit tests with -race (on Windows runs in the golang container, since -race needs cgo + gcc)
+    desc: Unit tests with -race (on Windows runs in the test container, since -race needs cgo + gcc)
     cmds:
-      - cmd: >-
-          docker run --rm
-          -v "{{toSlash .ROOT_DIR}}:/src" -w /src
-          -v gta6-clipper-go-mod-cache:/go/pkg/mod
-          -v gta6-clipper-go-build-cache:/root/.cache/go-build
-          -e CGO_ENABLED=1
-          {{.GO_IMAGE}} go test -race -count=1 ./...
+      - cmd: "{{.COMPOSE}} --profile test build tester"
+        platforms: [windows]
+      - cmd: "{{.COMPOSE}} --profile test run --rm --no-deps tester go test -race -count=1 ./..."
         platforms: [windows]
       - cmd: CGO_ENABLED=1 go test -race -count=1 ./...
         platforms: [linux, darwin]
@@ -110,6 +104,7 @@ tasks:
     vars:
       STAMP: '{{now | date "20060102-150405"}}'
     cmds:
+      - mkdir -p backups
       - "{{.COMPOSE}} exec app clipper backup /data/backup-{{.STAMP}}.db"
       - "{{.COMPOSE}} cp app:/data/backup-{{.STAMP}}.db ./backups/clipper-{{.STAMP}}.db"
       - "{{.COMPOSE}} exec app rm -f /data/backup-{{.STAMP}}.db"

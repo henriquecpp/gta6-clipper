@@ -156,9 +156,9 @@ volumes:
   whisper-models:
     name: whisper-models
   go-mod-cache:
-    name: gta6-clipper-go-mod-cache
+    name: gta6-clipper-gomod-cache
   go-build-cache:
-    name: gta6-clipper-go-build-cache
+    name: gta6-clipper-gobuild-cache
   prometheus-data:
     name: gta6-clipper-prometheus-data
   grafana-data:
