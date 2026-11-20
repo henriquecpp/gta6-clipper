@@ -171,10 +171,13 @@ streamers:
 ## Obtendo os tokens
 
 ### Twitch
-1. Acesse <https://dev.twitch.tv/console/apps> → **Register Your Application**.
-   - Name: qualquer; OAuth Redirect URLs: `http://localhost`; Category: *Application Integration*;
-     Client Type: **Confidential**.
-2. Copie **Client ID** e gere um **Client Secret** → `.env`.
+1. Acesse <https://dev.twitch.tv/console/apps> → **Register Your Application** (a conta precisa de e-mail
+   verificado e **2FA ativado**).
+   - Name: único entre todos os apps da Twitch (ex.: `clipper-<seu-login>`); OAuth Redirect URLs:
+     `http://localhost` (o Device Code Flow não usa, mas o campo é obrigatório); Category:
+     *Application Integration*; Client Type: **Confidential** (o tipo *Public* não pode usar o fluxo client
+     credentials, de que o app token precisa).
+2. Copie **Client ID** e clique em **New Secret** → `.env`. Gerar um novo secret invalida o anterior.
 3. Autorize o usuário que vai "ler o chat" (Device Code Flow, escopo `user:read:chat`):
    ```powershell
    task auth:twitch
@@ -184,6 +187,8 @@ streamers:
    (`/data/twitch_user_token.json`, permissão 0600), é renovado automaticamente (o refresh token é
    rotativo) e validado a cada hora. Se a renovação falhar (senha trocada, app desconectado), o log pede
    `task auth:twitch` de novo e o chat fica desligado até lá — voz e clipes continuam funcionando.
+4. O token é lido na inicialização: depois de autorizar, `docker compose restart app`. O log
+   `live monitoring enabled` deve mostrar `"chat":true`.
 
 O app token (detecção de lives e clipes) é obtido sozinho a partir do Client ID/Secret.
 
