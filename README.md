@@ -260,6 +260,11 @@ Ele captura por 60 s, mostra frames de áudio/fala, retém 20 s e estima a latê
 | Logs | `task logs` (`scripts\logs.ps1 -Service app`) |
 | Backup do banco | `task db:backup` (`scripts\backup.ps1`) → `.\backups\` |
 | Reautorizar a Twitch | `task auth:twitch` |
+| Testar transcrição + render sem Claude | `docker compose run --rm --no-deps app dryrun` (lista clipes com mídia retida) e `... app dryrun <clip_id>` |
+
+- **`dryrun`:** transcreve a janela retida de um clipe real, monta um corte sem IA (≈30 s em volta do pico,
+  legenda com a fala original, sem tradução) e renderiza em `.\output`. Não muda o estado do clipe, não
+  envia nada e não chama o Claude; serve para validar whisper e render com mídia real.
 
 - **Reinício:** ao subir, o app retoma o que ficou pela metade (reenvia prévias de clipes `detected`,
   reprocessa `approved`/`editing`/`rendered`) e apaga mídia órfã.
