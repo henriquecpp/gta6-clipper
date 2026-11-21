@@ -153,6 +153,15 @@ type Detection struct {
 	Voice        VoiceDetection     `yaml:"voice"`
 	Chat         ChatDetection      `yaml:"chat"`
 	Clips        ClipsDetection     `yaml:"clips"`
+	Calibration  Calibration        `yaml:"calibration"`
+}
+
+// Calibration learns a per-streamer strictness offset from the decisions.
+type Calibration struct {
+	Window    int     `yaml:"window"`
+	StepUp    float64 `yaml:"step_up"`
+	StepDown  float64 `yaml:"step_down"`
+	MaxOffset float64 `yaml:"max_offset"`
 }
 
 // VoiceDetection settings.

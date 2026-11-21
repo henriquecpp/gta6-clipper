@@ -279,8 +279,14 @@ Ele captura por 60 s, mostra frames de áudio/fala, retém 20 s e estima a latê
 ## Ajuste da detecção
 
 Parâmetros em `detection` ([ADR 0017](docs/decisions/0017-modelo-de-deteccao.md)):
-- **Muitas prévias sem conteúdo?** Suba `threshold_on` (3.5), `min_signal_z` (3.0) e `clips.min_z` (3.5),
-  de 0,5 em 0,5. **Poucas?** Desça os mesmos. Depois, `task up` (recria o app com a config nova).
+- **Calibração pelas suas decisões** (`detection.calibration`): cada 🗑️ Descartar soma 0,25 à exigência
+  daquele streamer (em `threshold_on`, `min_signal_z` e `clips.min_z`); cada ✅ Aprovar tira 0,25. Contam as
+  últimas 20 decisões do streamer, com teto de +1,5; prévias que expiram não contam. O ajuste vale na hora e
+  é refeito a partir do banco quando o app reinicia. O `/status` mostra a exigência extra de cada streamer.
+  Com passos iguais, a exigência se estabiliza quando você aprova cerca de metade das prévias.
+- **Muitas prévias sem conteúdo mesmo assim?** Suba a base: `threshold_on` (4.0), `min_signal_z` (3.5) e
+  `clips.min_z` (4.0), de 0,5 em 0,5. **Poucas?** Desça os mesmos. Depois, `task up` (recria o app com a
+  config nova).
 - `threshold_on`/`threshold_off` (histerese), `weights` (voz, chat, clipes), `cooldown`, `warmup` (5 min sem
   disparos no início de cada live), `min_signal_z` (voz ou chat precisam passar desse z; vale também para a
   chuva de clipes, olhando ±`group_window` em volta dela).

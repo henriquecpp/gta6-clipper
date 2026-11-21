@@ -31,7 +31,12 @@ type Clips struct {
 	cfg  ClipsConfig
 	seen map[string]domain.StreamPos
 	pos  []domain.StreamPos // sorted
+	// strict is the calibration offset added to MinZ.
+	strict float64
 }
+
+// SetStrictness sets the calibration offset (see CalibrationConfig).
+func (c *Clips) SetStrictness(off float64) { c.strict = max(off, 0) }
 
 var _ Detector = (*Clips)(nil)
 
@@ -102,7 +107,7 @@ func (c *Clips) Rate(now domain.StreamPos) float64 {
 // max(MinClips, ⌈λ + MinZ·√λ⌉), λ being the clips expected in 2×GroupWindow.
 func (c *Clips) Required(now domain.StreamPos) int {
 	lambda := c.Rate(now) * (2 * c.cfg.GroupWindow).Seconds()
-	need := int(math.Ceil(lambda + c.cfg.MinZ*math.Sqrt(lambda)))
+	need := int(math.Ceil(lambda + (c.cfg.MinZ+c.strict)*math.Sqrt(lambda)))
 	return max(c.cfg.MinClips, need)
 }
 

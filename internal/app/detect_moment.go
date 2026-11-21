@@ -31,6 +31,9 @@ type DetectionConfig struct {
 	// RetainMargin delays the retention past the post-roll so the segment
 	// holding the end of the window is complete (e.g. one segment + 1 s).
 	RetainMargin time.Duration
+	// Calibration turns the approver's decisions into a per-streamer
+	// strictness offset (zero value: disabled).
+	Calibration detect.CalibrationConfig
 }
 
 // IDFunc generates clip ids (UUID v7, injected by cmd).
@@ -54,6 +57,9 @@ type DetectMoment struct {
 
 	mu       sync.Mutex
 	sessions map[domain.StreamID]*session
+	// decisions (oldest first, per streamer login) and the offsets derived from them.
+	decisions map[string][]domain.Decision
+	offsets   map[string]float64
 }
 
 // DetectMomentOption configures optional collaborators.
@@ -81,7 +87,9 @@ func NewDetectMoment(cfg DetectionConfig, repo ClipRepository, newID IDFunc, clo
 	}
 	d := &DetectMoment{
 		cfg: cfg, repo: repo, newID: newID, clock: clock, log: log, metrics: NopMetrics{},
-		sessions: make(map[domain.StreamID]*session),
+		sessions:  make(map[domain.StreamID]*session),
+		decisions: make(map[string][]domain.Decision),
+		offsets:   make(map[string]float64),
 	}
 	for _, o := range opts {
 		o(d)
@@ -133,6 +141,7 @@ func (d *DetectMoment) StartStream(s domain.Streamer, live domain.LiveStream, ca
 	}
 	sess.chat.SetViewers(live.Viewers)
 	sess.scorer = detect.NewScorer(d.cfg.Scorer, sess.voice, sess.chat, sess.clips)
+	sess.setStrictness(d.offsets[s.Login])
 	d.sessions[live.ID] = sess
 	d.log.Info("detection started", slog.String("streamer", s.Login), slog.String("stream_id", string(live.ID)))
 }
@@ -437,7 +446,7 @@ func (d *DetectMoment) ObserveClips(ctx context.Context, id domain.StreamID, cli
 			// Same gate as the fast path (§9): voice or chat must react. Viewers of
 			// big channels clip all the time; a cluster nobody reacted to is noise.
 			// The window is ±group_window because clip positions are estimates.
-			if s.reaction(cl.Center, gw) < d.cfg.Scorer.MinSignalZ {
+			if s.reaction(cl.Center, gw) < s.scorer.MinSignalZ() {
 				continue
 			}
 			score, values := s.scorer.Score(cl.Center)

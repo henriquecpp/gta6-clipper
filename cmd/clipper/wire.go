@@ -59,6 +59,9 @@ func detectionConfig(c *config.Config) app.DetectionConfig {
 			MinClips:    d.Clips.MinClips,
 			MinZ:        d.Clips.MinZ,
 		},
+		Calibration: detect.CalibrationConfig{
+			Window: d.Calibration.Window, StepUp: d.Calibration.StepUp, StepDown: d.Calibration.StepDown, Max: d.Calibration.MaxOffset,
+		},
 		PreRoll:        d.PreRoll.D(),
 		PostRoll:       d.PostRoll.D(),
 		BufferDuration: c.Capture.BufferDuration.D(),

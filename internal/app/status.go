@@ -18,6 +18,9 @@ type StatusReport struct {
 	// CostToday is the editor cost of clips edited since 00:00 UTC.
 	CostToday  domain.MicroUSD
 	ClipsToday map[domain.ClipState]int
+	// Strictness is the extra detection bar per streamer learned from the
+	// approver's decisions (only non-zero entries).
+	Strictness map[string]float64
 }
 
 // PendingClip is one entry of /pending.
@@ -33,6 +36,7 @@ type Status struct {
 	ttl    time.Duration
 	lives  func() []domain.LiveStream
 	queue  func() int
+	strict func() map[string]float64
 	errors *ErrorLog
 }
 
@@ -47,6 +51,9 @@ func NewStatus(repo ClipRepository, clock Clock, ttl time.Duration, lives func()
 // SetQueue sets the queue depth source (wired after the producer exists).
 func (s *Status) SetQueue(f func() int) { s.queue = f }
 
+// SetStrictness sets the calibration source (DetectMoment.Strictness).
+func (s *Status) SetStrictness(f func() map[string]float64) { s.strict = f }
+
 // Report builds the status report.
 func (s *Status) Report(ctx context.Context) (StatusReport, error) {
 	r := StatusReport{ClipsToday: map[domain.ClipState]int{}}
@@ -55,6 +62,9 @@ func (s *Status) Report(ctx context.Context) (StatusReport, error) {
 	}
 	if s.queue != nil {
 		r.Queue = s.queue()
+	}
+	if s.strict != nil {
+		r.Strictness = s.strict()
 	}
 	r.LastError, r.LastErrorAt = s.errors.Last()
 	now := s.clock.Now()

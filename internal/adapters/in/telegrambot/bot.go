@@ -188,6 +188,14 @@ func (b *Bot) statusText(ctx context.Context) string {
 		sort.Strings(states)
 		s.WriteString("\nClipes hoje: " + strings.Join(states, " · "))
 	}
+	if len(r.Strictness) > 0 {
+		parts := make([]string, 0, len(r.Strictness))
+		for login, off := range r.Strictness {
+			parts = append(parts, fmt.Sprintf("%s +%.2f", html.EscapeString(login), off))
+		}
+		sort.Strings(parts)
+		s.WriteString("\nExigência extra (aprendida dos seus descartes): " + strings.Join(parts, " · "))
+	}
 	if r.LastError != "" {
 		fmt.Fprintf(&s, "\nÚltimo erro (há %s): %s", ago(b.now().Sub(r.LastErrorAt)), html.EscapeString(truncate(r.LastError, 500)))
 	} else {

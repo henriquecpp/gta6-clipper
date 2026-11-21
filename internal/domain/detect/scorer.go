@@ -37,7 +37,15 @@ type Scorer struct {
 	lastPeak   domain.StreamPos
 	lastScore  float64
 	lastValues map[domain.SignalKind]float64
+	// strict is the calibration offset added to ThresholdOn and MinSignalZ.
+	strict float64
 }
+
+// SetStrictness sets the calibration offset (see CalibrationConfig).
+func (s *Scorer) SetStrictness(off float64) { s.strict = max(off, 0) }
+
+// MinSignalZ is the voice/chat gate including the calibration offset.
+func (s *Scorer) MinSignalZ() float64 { return s.cfg.MinSignalZ + s.strict }
 
 // NewScorer builds a scorer over the given detectors.
 func NewScorer(cfg ScorerConfig, detectors ...Detector) *Scorer {
@@ -76,14 +84,15 @@ func (s *Scorer) Evaluate(pos domain.StreamPos) (domain.Moment, bool) {
 		s.armed = true
 		return domain.Moment{}, false
 	}
-	gate := values[domain.SignalVoice] >= s.cfg.MinSignalZ || values[domain.SignalChat] >= s.cfg.MinSignalZ
+	minZ := s.MinSignalZ()
+	gate := values[domain.SignalVoice] >= minZ || values[domain.SignalChat] >= minZ
 
 	if !s.active {
 		if score < s.cfg.ThresholdOff {
 			s.armed = true
 		}
 		cooled := !s.hasLast || pos-s.lastPeak >= domain.StreamPos(s.cfg.Cooldown)
-		if s.armed && cooled && gate && score >= s.cfg.ThresholdOn {
+		if s.armed && cooled && gate && score >= s.cfg.ThresholdOn+s.strict {
 			s.active, s.armed = true, false
 			s.episodeAt = pos
 			s.best = domain.Moment{Peak: pos, Score: score, Values: values}

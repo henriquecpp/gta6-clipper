@@ -20,6 +20,8 @@ type Decisions struct {
 	ttl      time.Duration
 	// produce starts the final production of an approved clip (Phase 5).
 	produce func(ctx context.Context, id domain.ClipID)
+	// observe receives every decision (detection calibration).
+	observe func(streamer string, d domain.Decision)
 }
 
 // DecisionsOption configures optional collaborators.
@@ -28,6 +30,12 @@ type DecisionsOption func(*Decisions)
 // WithProducer sets what runs after an approval (ProduceFinalClip queue).
 func WithProducer(f func(ctx context.Context, id domain.ClipID)) DecisionsOption {
 	return func(d *Decisions) { d.produce = f }
+}
+
+// WithDecisionObserver sets who learns from every approval, discard and
+// expiry (DetectMoment.ObserveDecision calibrates the detection).
+func WithDecisionObserver(f func(streamer string, d domain.Decision)) DecisionsOption {
+	return func(d *Decisions) { d.observe = f }
 }
 
 // WithDecisionMetrics sets the metrics sink.
@@ -75,6 +83,7 @@ func (d *Decisions) ApproveClip(ctx context.Context, id domain.ClipID) error {
 	d.metrics.ClipState(domain.StateApproved)
 	d.metrics.Decision(clip.Streamer, true)
 	d.log.Info("clip approved", slog.String("clip_id", string(id)), slog.String("streamer", clip.Streamer))
+	d.observeDecision(clip)
 	d.update(ctx, clip)
 	if d.produce != nil {
 		d.produce(ctx, id)
@@ -96,7 +105,14 @@ func (d *Decisions) afterFinal(ctx context.Context, c *domain.Clip, state domain
 	d.metrics.ClipState(state)
 	d.metrics.Decision(c.Streamer, false)
 	d.log.Info("clip "+string(state), slog.String("clip_id", string(c.ID)), slog.String("streamer", c.Streamer))
+	d.observeDecision(c)
 	d.update(ctx, c)
+}
+
+func (d *Decisions) observeDecision(c *domain.Clip) {
+	if d.observe != nil && c.Decision != "" {
+		d.observe(c.Streamer, c.Decision)
+	}
 }
 
 func (d *Decisions) update(ctx context.Context, c *domain.Clip) {

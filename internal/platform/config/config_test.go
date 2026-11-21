@@ -30,6 +30,9 @@ func TestExampleConfigIsValid(t *testing.T) {
 	if cfg.LogLevel != "debug" || cfg.Capture.BufferMaxBytes != 4<<30 || cfg.Render.MaxFileBytes != 45<<20 {
 		t.Fatalf("unexpected values: %+v", cfg)
 	}
+	if d := cfg.Detection; d.ThresholdOn != 4.0 || d.Clips.MinZ != 4.0 || d.Calibration != (Calibration{Window: 20, StepUp: 0.25, StepDown: 0.25, MaxOffset: 1.5}) {
+		t.Fatalf("detection = %+v", d)
+	}
 	ss := cfg.DomainStreamers()
 	if len(ss) != 1 || ss[0].Login != "exemplo_streamer" || ss[0].Offsets.Chat != 8*time.Second || ss[0].Layout != domain.LayoutBlur {
 		t.Fatalf("streamers = %+v", ss)
@@ -41,7 +44,8 @@ func TestEmptyConfigUsesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Detection.ThresholdOn != 3.5 || cfg.Detection.Clips.MinZ != 3.5 || cfg.Approval.TTL.D() != 6*time.Hour || cfg.Secrets.HasTwitch() {
+	if cfg.Detection.ThresholdOn != 4.0 || cfg.Detection.Clips.MinZ != 4.0 || cfg.Detection.Calibration.MaxOffset != 1.5 ||
+		cfg.Approval.TTL.D() != 6*time.Hour || cfg.Secrets.HasTwitch() {
 		t.Fatalf("defaults not applied: %+v", cfg)
 	}
 }
@@ -103,6 +107,8 @@ func TestValidationErrors(t *testing.T) {
 		"concurrency":      "concurrency: {render_workers: 0}",
 		"min clips":        "detection: {clips: {min_clips: 0}}",
 		"clips min z":      "detection: {clips: {min_z: -1}}",
+		"calibration":      "detection: {calibration: {window: 0}}",
+		"gate unreachable": "detection: {min_signal_z: 5, calibration: {max_offset: 2}}",
 		"voice frame":      "detection: {voice: {frame: 1s, window: 2s}}",
 		"pricing":          "editor: {pricing: {input: -1}}",
 		"max tokens":       "editor: {max_tokens: 10}",

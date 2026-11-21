@@ -125,8 +125,13 @@ func runService(_ []string, stderr io.Writer) error {
 	produce := app.NewProduceFinalClip(produceConfig(cfg), repo, transcriber, editor, renderer, notifier, media, clk, log, prom, errLog)
 	queue := app.NewProduceQueue(produce.Execute, max(cfg.Concurrency.TranscribeWorkers, cfg.Concurrency.RenderWorkers), 100,
 		cfg.HTTP.ShutdownTimeout.D(), log, prom)
+	// The approver's decisions calibrate the detection bar of each streamer.
+	if err := detectMoment.Calibrate(ctx); err != nil {
+		log.Warn("calibrate detection", logging.Err(err))
+	}
 	decisions := app.NewDecisions(repo, media, notifier, clk, log, ttl, app.WithDecisionMetrics(prom),
-		app.WithProducer(func(ctx context.Context, id domain.ClipID) { queue.Submit(ctx, id) }))
+		app.WithProducer(func(ctx context.Context, id domain.ClipID) { queue.Submit(ctx, id) }),
+		app.WithDecisionObserver(detectMoment.ObserveDecision))
 	retry := app.NewRetryClip(repo, notifier, clk, log, prom, queue.Submit)
 	recoverPending := app.NewRecoverPending(repo, sendPreview.Execute, queue.Submit, log)
 
@@ -185,6 +190,7 @@ func runService(_ []string, stderr io.Writer) error {
 	}
 
 	status := app.NewStatus(repo, clk, ttl, lives, queue.Depth, errLog)
+	status.SetStrictness(detectMoment.Strictness)
 
 	srv := httpserver.New(cfg.HTTP.Addr,
 		httpserver.WithLogger(log),

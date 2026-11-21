@@ -70,9 +70,9 @@ detection:
   tick: 500ms
   warmup: 5m
   cooldown: 60s
-  threshold_on: 3.5        # higher = fewer previews (voice and chat must react together)
+  threshold_on: 4.0        # higher = fewer previews (voice and chat must react together)
   threshold_off: 1.5
-  min_signal_z: 3.0        # voice or chat must reach this z (also gates clip rains)
+  min_signal_z: 3.5        # voice or chat must reach this z (also gates clip rains)
   z_max: 6.0
   pre_roll: 60s
   post_roll: 30s
@@ -93,4 +93,12 @@ detection:
     poll_interval: 30s
     group_window: 15s
     min_clips: 3
-    min_z: 3.5               # how far a clip rain must exceed the channel's usual clip rate
+    min_z: 4.0               # how far a clip rain must exceed the channel's usual clip rate
+  # Your decisions calibrate each streamer: every discard adds step_up to threshold_on,
+  # min_signal_z and clips.min_z of that streamer, every approval removes step_down
+  # (last 'window' decisions, capped at max_offset; max_offset 0 disables it).
+  calibration:
+    window: 20
+    step_up: 0.25
+    step_down: 0.25
+    max_offset: 1.5

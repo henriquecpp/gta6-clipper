@@ -205,5 +205,11 @@ func (d Detection) validate() []error {
 	if d.Clips.MinZ < 0 {
 		add("detection.clips.min_z must be >= 0")
 	}
+	if c := d.Calibration; c.Window < 1 || c.StepUp < 0 || c.StepDown < 0 || c.MaxOffset < 0 {
+		add("detection.calibration needs window >= 1 and step_up, step_down, max_offset >= 0 (max_offset 0 disables it)")
+	}
+	if d.MinSignalZ+d.Calibration.MaxOffset > d.ZMax {
+		add("detection.min_signal_z + calibration.max_offset must be <= z_max (or the gate could never open)")
+	}
 	return errs
 }

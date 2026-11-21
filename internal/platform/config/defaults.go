@@ -56,9 +56,9 @@ func Defaults() *Config {
 			Tick:         dur(500 * time.Millisecond),
 			Warmup:       dur(5 * time.Minute),
 			Cooldown:     dur(60 * time.Second),
-			ThresholdOn:  3.5,
+			ThresholdOn:  4.0,
 			ThresholdOff: 1.5,
-			MinSignalZ:   3.0,
+			MinSignalZ:   3.5,
 			ZMax:         6.0,
 			PreRoll:      dur(60 * time.Second),
 			PostRoll:     dur(30 * time.Second),
@@ -82,8 +82,9 @@ func Defaults() *Config {
 				PollInterval: dur(30 * time.Second),
 				GroupWindow:  dur(15 * time.Second),
 				MinClips:     3,
-				MinZ:         3.5,
+				MinZ:         4.0,
 			},
+			Calibration: Calibration{Window: 20, StepUp: 0.25, StepDown: 0.25, MaxOffset: 1.5},
 		},
 	}
 }
