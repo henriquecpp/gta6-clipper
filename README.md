@@ -272,6 +272,8 @@ Ele captura por 60 s, mostra frames de áudio/fala, retém 20 s e estima a latê
   reprocessa `approved`/`editing`/`rendered`) e apaga mídia órfã.
 - **Desligamento** (`task down`/SIGTERM): a ingestão para, jobs em andamento têm `http.shutdown_timeout`
   (45 s) para terminar; o resto é retomado no próximo início.
+- **Memória:** o buffer fica em tmpfs, que conta no limite de memória do container `app` (6 GB no Compose):
+  com `buffer_max_bytes: 4GiB` o app usa até ~4,5 GB. Ao subir o buffer, suba também o limite do serviço.
 - **Disco:** o buffer (tmpfs) é limitado por `capture.buffer_duration` e `capture.buffer_max_bytes`; janelas
   retidas e prévias ficam no volume `clipper-pending` e são apagadas ao descartar, expirar ou entregar. Os
   vídeos finais em `.\output` são seus: apague quando quiser.
