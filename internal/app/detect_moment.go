@@ -393,7 +393,10 @@ func (d *DetectMoment) ObserveClips(ctx context.Context, id domain.StreamID, cli
 			}
 			last, hasLast := s.scorer.LastPeak()
 			inCooldown := hasLast && absPos(cl.Center-last) < domain.StreamPos(d.cfg.Scorer.Cooldown)
-			inBuffer := cl.Center-domain.StreamPos(d.cfg.PreRoll) >= capPos-domain.StreamPos(d.cfg.BufferDuration)
+			// Clips of the minutes before the capture started map to negative
+			// positions: nothing was recorded there, so they never become moments
+			// (otherwise every new clip of that cluster would re-propose and drop it).
+			inBuffer := cl.Center >= 0 && cl.Center-domain.StreamPos(d.cfg.PreRoll) >= capPos-domain.StreamPos(d.cfg.BufferDuration)
 			if inCooldown || !inBuffer {
 				continue
 			}

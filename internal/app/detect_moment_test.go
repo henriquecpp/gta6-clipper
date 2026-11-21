@@ -1,9 +1,12 @@
 package app_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -232,6 +235,30 @@ func TestDetectMomentLateClipMoment(t *testing.T) {
 	// Clips far outside the buffer are ignored.
 	if err := h.d.ObserveClips(context.Background(), testLive.ID, lateClips(-20*time.Minute, 3, "old")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDetectMomentIgnoresClipsBeforeCaptureStart(t *testing.T) {
+	var logs bytes.Buffer
+	h := newHarness(t, true)
+	h.d = app.NewDetectMoment(detectionConfig(), h.repo, func() (domain.ClipID, error) { return "c", nil }, h.clock,
+		slog.New(slog.NewTextHandler(&logs, nil)), app.WithCapture(h.capture), app.WithDetectMetrics(h.metrics))
+	h.d.StartStream(testStreamer, testLive, captureStart)
+	h.run(0, 40*time.Second, steadyVoice, h.steadyChat)
+	// Viewers clipped something 30 s before the capture started, and more
+	// clips of it keep arriving with every poll.
+	for i := range 3 {
+		from := 40*time.Second + time.Duration(i)*30*time.Second
+		if err := h.d.ObserveClips(context.Background(), testLive.ID, lateClips(-30*time.Second, 3+i, fmt.Sprintf("pre%d", i))); err != nil {
+			t.Fatal(err)
+		}
+		h.run(from, from+30*time.Second, steadyVoice, h.steadyChat)
+	}
+	if h.repo.Len() != 0 || len(h.capture.Calls) != 0 {
+		t.Fatalf("clips = %d, retain calls = %d; want none", h.repo.Len(), len(h.capture.Calls))
+	}
+	if s := logs.String(); strings.Contains(s, "late moment") || strings.Contains(s, "moment dropped") {
+		t.Fatalf("pre-capture clips were proposed as moments:\n%s", s)
 	}
 }
 
