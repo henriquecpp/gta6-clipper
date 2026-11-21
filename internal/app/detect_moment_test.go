@@ -103,6 +103,19 @@ func (h *harness) run(from, until time.Duration, level func(time.Duration) float
 
 func steadyVoice(time.Duration) float64 { return -30 }
 
+// shoutAt is a steady voice with 2 s shouts at the given positions: a voice
+// reaction that alone stays below threshold_on (0.45 × z_max < 3).
+func shoutAt(at ...time.Duration) func(time.Duration) float64 {
+	return func(p time.Duration) float64 {
+		for _, a := range at {
+			if p >= a && p < a+2*time.Second {
+				return -12
+			}
+		}
+		return -30
+	}
+}
+
 // steadyChat sends 2 messages per second.
 func (h *harness) steadyChat(now time.Duration) {
 	if now%(500*time.Millisecond) == 0 {
@@ -204,9 +217,9 @@ func lateClips(center time.Duration, n int, prefix string) []domain.ViewerClip {
 
 func TestDetectMomentLateClipMoment(t *testing.T) {
 	h := newHarness(t, true)
-	h.run(0, 200*time.Second, steadyVoice, h.steadyChat)
+	h.run(0, 200*time.Second, shoutAt(150*time.Second), h.steadyChat)
 	if h.repo.Len() != 0 {
-		t.Fatal("no moment expected from steady signals")
+		t.Fatal("a shout alone must not trigger a fast moment")
 	}
 	// Three viewer clips around 150 s arrive late (at 200 s).
 	if err := h.d.ObserveClips(context.Background(), testLive.ID, lateClips(150*time.Second, 3, "v")); err != nil {
@@ -262,9 +275,44 @@ func TestDetectMomentIgnoresClipsBeforeCaptureStart(t *testing.T) {
 	}
 }
 
-func TestDetectMomentClipsBoostAcceptedClip(t *testing.T) {
+func TestDetectMomentLateClipsNeedAReaction(t *testing.T) {
 	h := newHarness(t, true)
 	h.run(0, 200*time.Second, steadyVoice, h.steadyChat)
+	// Viewers clipped 150 s, but neither the streamer nor the chat reacted.
+	if err := h.d.ObserveClips(context.Background(), testLive.ID, lateClips(150*time.Second, 5, "quiet")); err != nil {
+		t.Fatal(err)
+	}
+	h.run(200*time.Second, 240*time.Second, steadyVoice, h.steadyChat)
+	if h.repo.Len() != 0 {
+		t.Fatalf("clips = %d; a cluster without voice or chat reaction must not become a moment", h.repo.Len())
+	}
+}
+
+func TestDetectMomentLateClipsRespectCooldown(t *testing.T) {
+	h := newHarness(t, true)
+	ctx := context.Background()
+	h.run(0, 300*time.Second, shoutAt(150*time.Second, 182*time.Second, 260*time.Second), h.steadyChat)
+	step := func(from time.Duration, clips []domain.ViewerClip) {
+		t.Helper()
+		if err := h.d.ObserveClips(ctx, testLive.ID, clips); err != nil {
+			t.Fatal(err)
+		}
+		h.run(from, from+5*time.Second, steadyVoice, h.steadyChat)
+	}
+	step(300*time.Second, lateClips(150*time.Second, 3, "a")) // accepted
+	step(305*time.Second, lateClips(260*time.Second, 3, "b")) // accepted, now the latest peak
+	// Arrives last but sits 32 s after the first moment (beyond the ±15 s
+	// group window, inside the 60 s cooldown): no new clip.
+	step(310*time.Second, lateClips(182*time.Second, 3, "c"))
+	clips, _ := h.repo.ListByState(ctx, domain.StateDetected)
+	if len(clips) != 2 {
+		t.Fatalf("clips = %d, want 2 (the 182 s cluster is inside the cooldown of 150 s)", len(clips))
+	}
+}
+
+func TestDetectMomentClipsBoostAcceptedClip(t *testing.T) {
+	h := newHarness(t, true)
+	h.run(0, 200*time.Second, shoutAt(150*time.Second), h.steadyChat)
 	_ = h.d.ObserveClips(context.Background(), testLive.ID, lateClips(150*time.Second, 3, "a"))
 	h.run(200*time.Second, 205*time.Second, steadyVoice, h.steadyChat)
 	clips, _ := h.repo.ListByState(context.Background(), domain.StateDetected)
@@ -289,7 +337,7 @@ func TestDetectMomentFailures(t *testing.T) {
 	// Retain failure: error returned, nothing persisted.
 	h := newHarness(t, true)
 	h.capture.RetainErr = boom
-	h.run(0, 200*time.Second, steadyVoice, h.steadyChat)
+	h.run(0, 200*time.Second, shoutAt(150*time.Second), h.steadyChat)
 	_ = h.d.ObserveClips(ctx, testLive.ID, lateClips(150*time.Second, 3, "x"))
 	h.run(200*time.Second, 205*time.Second, steadyVoice, h.steadyChat)
 	if len(h.tickErrs) == 0 || !errors.Is(h.tickErrs[0], boom) {
@@ -302,7 +350,7 @@ func TestDetectMomentFailures(t *testing.T) {
 	// Save failure: the retained media is deleted.
 	h = newHarness(t, true)
 	h.repo.SaveHook = func(*domain.Clip) error { return boom }
-	h.run(0, 200*time.Second, steadyVoice, h.steadyChat)
+	h.run(0, 200*time.Second, shoutAt(150*time.Second), h.steadyChat)
 	_ = h.d.ObserveClips(ctx, testLive.ID, lateClips(150*time.Second, 3, "y"))
 	h.run(200*time.Second, 205*time.Second, steadyVoice, h.steadyChat)
 	if len(h.capture.Deleted) != 1 || len(h.capture.Live) != 0 {

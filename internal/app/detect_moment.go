@@ -337,9 +337,40 @@ func (s *session) signalTimeline(w domain.Window) []domain.SignalPoint {
 	return out
 }
 
+// nearMoment reports whether pos is within the cooldown of any known moment:
+// the latest scorer peak, moments waiting for their post-roll and accepted
+// ones. Late clusters arrive out of order, so the latest peak alone is not
+// enough (caller holds s.mu).
+func (s *session) nearMoment(pos, cooldown domain.StreamPos) bool {
+	if last, ok := s.scorer.LastPeak(); ok && absPos(pos-last) < cooldown {
+		return true
+	}
+	for _, m := range s.pending {
+		if absPos(pos-m.Peak) < cooldown {
+			return true
+		}
+	}
+	for _, a := range s.accepted {
+		if absPos(pos-a.peak) < cooldown {
+			return true
+		}
+	}
+	return false
+}
+
+// reaction is the highest voice or chat value within ±span of pos (caller holds s.mu).
+func (s *session) reaction(pos, span domain.StreamPos) float64 {
+	best := 0.0
+	for p := max(0, pos-span); p <= pos+span; p += domain.StreamPos(time.Second) {
+		best = max(best, s.voice.Value(p), s.chat.Value(p))
+	}
+	return best
+}
+
 // ObserveClips feeds viewer clips (the late signal). A cluster of clips near
-// a known moment raises its score; a cluster far from every known moment and
-// still inside the buffer becomes a late moment.
+// a known moment raises its score; a cluster outside the cooldown of every
+// known moment, still inside the buffer and with a voice or chat reaction
+// becomes a late moment.
 func (d *DetectMoment) ObserveClips(ctx context.Context, id domain.StreamID, clips []domain.ViewerClip) error {
 	s := d.session(id)
 	if s == nil || len(clips) == 0 {
@@ -391,13 +422,17 @@ func (d *DetectMoment) ObserveClips(ctx context.Context, id domain.StreamID, cli
 			if handled {
 				continue
 			}
-			last, hasLast := s.scorer.LastPeak()
-			inCooldown := hasLast && absPos(cl.Center-last) < domain.StreamPos(d.cfg.Scorer.Cooldown)
 			// Clips of the minutes before the capture started map to negative
 			// positions: nothing was recorded there, so they never become moments
 			// (otherwise every new clip of that cluster would re-propose and drop it).
 			inBuffer := cl.Center >= 0 && cl.Center-domain.StreamPos(d.cfg.PreRoll) >= capPos-domain.StreamPos(d.cfg.BufferDuration)
-			if inCooldown || !inBuffer {
+			if !inBuffer || s.nearMoment(cl.Center, domain.StreamPos(d.cfg.Scorer.Cooldown)) {
+				continue
+			}
+			// Same gate as the fast path (§9): voice or chat must react. Viewers of
+			// big channels clip all the time; a cluster nobody reacted to is noise.
+			// The window is ±group_window because clip positions are estimates.
+			if s.reaction(cl.Center, gw) < d.cfg.Scorer.MinSignalZ {
 				continue
 			}
 			score, values := s.scorer.Score(cl.Center)

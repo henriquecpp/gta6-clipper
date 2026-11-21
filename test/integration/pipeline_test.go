@@ -168,9 +168,12 @@ func TestPipelineEndToEnd(t *testing.T) {
 		repo, rend, notifier, clk, log, nil, errLog)
 	detectMoment := app.NewDetectMoment(app.DetectionConfig{
 		Tick: 500 * time.Millisecond,
+		// The sample video has no voice/chat reaction, so the reaction gate is
+		// off here (MinSignalZ 0; the warmup already disables the fast path).
+		// The gate itself is covered by the app unit tests.
 		Scorer: detect.ScorerConfig{
 			Weights:     map[domain.SignalKind]float64{domain.SignalVoice: 0.45, domain.SignalChat: 0.45, domain.SignalClips: 0.10},
-			ThresholdOn: 3, ThresholdOff: 1.5, ZMax: 6, MinSignalZ: 2, Warmup: 10 * time.Minute, Cooldown: time.Minute,
+			ThresholdOn: 3, ThresholdOff: 1.5, ZMax: 6, MinSignalZ: 0, Warmup: 10 * time.Minute, Cooldown: time.Minute,
 		},
 		Voice: detect.VoiceConfig{Window: 400 * time.Millisecond, Alpha: 0.02}, Chat: detect.ChatConfig{Window: 10 * time.Second, Sustain: 3 * time.Second, Alpha: 0.02},
 		Clips:   detect.ClipsConfig{GroupWindow: 15 * time.Second, MinClips: 3},
