@@ -164,7 +164,7 @@ func TestPipelineEndToEnd(t *testing.T) {
 		return domain.ClipID(fmt.Sprintf("0193f1c2-0000-7000-8000-%012d", idN)), nil
 	}
 	errLog := &app.ErrorLog{}
-	sendPreview := app.NewSendPreview(app.PreviewConfig{Duration: 40 * time.Second, Height: 480, MaxBytes: 45 << 20},
+	sendPreview := app.NewSendPreview(app.PreviewConfig{Duration: 40 * time.Second, Width: 480, Height: 854, FPS: 30, MaxBytes: 45 << 20},
 		repo, rend, notifier, clk, log, nil, errLog)
 	detectMoment := app.NewDetectMoment(app.DetectionConfig{
 		Tick: 500 * time.Millisecond,
@@ -234,7 +234,7 @@ func TestPipelineEndToEnd(t *testing.T) {
 	if len(previews) != 1 || !strings.Contains(previews[0].Params["reply_markup"], "a:"+string(clip.ID)) || previews[0].FileBytes == 0 {
 		t.Fatalf("preview message = %+v", previews)
 	}
-	if w, h, _ := probe(t, string(clip.PreviewMedia)); h != 480 || w == 0 {
+	if w, h, _ := probe(t, string(clip.PreviewMedia)); w != 480 || h != 854 {
 		t.Fatalf("preview %dx%d", w, h)
 	}
 

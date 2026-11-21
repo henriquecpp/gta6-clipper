@@ -6,7 +6,8 @@ Clipador automático de lives da **Twitch** com **aprovação humana via Telegra
    (configurável em `twitch.games`).
 2. Detecta "melhores momentos" por **voz** (energia da fala, com VAD) e **chat** (taxa de mensagens e
    emotes), em tempo real, e confirma com a **chuva de clipes** dos espectadores (sinal tardio).
-3. Guarda a janela de vídeo do momento, gera uma **prévia** 480p e envia ao seu Telegram com os botões
+3. Guarda a janela de vídeo do momento, gera uma **prévia vertical** (480×854, mesmo layout do vídeo final) e
+   envia ao seu Telegram com os botões
    **✅ Aprovar** e **🗑️ Descartar**.
 4. Só depois da aprovação: transcrição local na GPU (whisper.cpp) → **Claude** escolhe o corte, escreve a
    manchete, a legenda em PT-BR (traduzida se preciso) e o texto do post → render vertical 9:16 com legenda
@@ -52,7 +53,7 @@ Twitch ──► MonitorLives (polling Get Streams a cada 45 s, filtro de jogo)
                   DetectMoment (baseline EWMA, z-scores, fusão, histerese, cooldown)
                               │ momento aceito
                               ▼
-     retém a janela (sem re-encode) → clipe "detected" → prévia 480p → Telegram [Aprovar][Descartar]
+     retém a janela (sem re-encode) → clipe "detected" → prévia 9:16 → Telegram [Aprovar][Descartar]
                               │ você aprova
                               ▼
      whisper (GPU) → Claude (corte, manchete, legenda, post) → render 9:16 + ASS → Telegram
@@ -171,6 +172,8 @@ twitch:
   O padrão, se a chave não existir, é só GTA VI; `games: []` monitora qualquer jogo.
 - **Layouts:** `blur` — vídeo 16:9 no meio sobre ele mesmo ampliado e desfocado; `stack` — câmera em cima
   (35%) e jogo embaixo, com as regiões em coordenadas normalizadas do quadro original; `crop` — recorte central.
+  A prévia do Telegram usa o mesmo layout, em 480×854 (`render.preview_height`; a largura segue a proporção
+  do vídeo final), então o que você aprova já tem a cara do short.
 - **`approval.ttl`** (6 h): prévias não decididas expiram e a mídia é apagada.
 - **`render`**: resolução, fps (30/60), duração mínima/máxima do corte, `max_file_bytes` (≤ 50 MiB, limite
   do Telegram), fonte e caracteres por linha da legenda.

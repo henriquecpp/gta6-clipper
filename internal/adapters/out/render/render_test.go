@@ -37,11 +37,14 @@ func golden(t *testing.T, name, got string) {
 
 func lines(a []string) string { return strings.Join(a, "\n") + "\n" }
 
-var previewSpec = domain.PreviewSpec{Start: 33*time.Second + 333*time.Millisecond, Duration: 40 * time.Second, Height: 480, MaxBytes: 45 << 20}
+var previewSpec = domain.PreviewSpec{Start: 33*time.Second + 333*time.Millisecond, Duration: 40 * time.Second,
+	Width: 480, Height: 854, FPS: 30, Layout: domain.LayoutBlur, MaxBytes: 45 << 20}
+
+var previewGraph = filterGraph(previewSpec.Layout, previewSpec.Stack, previewSpec.Width, previewSpec.Height, previewSpec.FPS, "")
 
 func TestPreviewArgsGolden(t *testing.T) {
-	golden(t, "render_preview_nvenc", lines(previewArgs("/pending/s1_1_2.ts", "/pending/s1_1_2.preview.mp4", previewSpec, EncoderNVENC, 4)))
-	golden(t, "render_preview_x264", lines(previewArgs("/pending/s1_1_2.ts", "/pending/s1_1_2.preview.mp4", previewSpec, EncoderX264, 4)))
+	golden(t, "render_preview_nvenc", lines(previewArgs("/pending/s1_1_2.ts", "/pending/s1_1_2.preview.mp4", previewGraph, previewSpec, EncoderNVENC, 4)))
+	golden(t, "render_preview_x264", lines(previewArgs("/pending/s1_1_2.ts", "/pending/s1_1_2.preview.mp4", previewGraph, previewSpec, EncoderX264, 4)))
 }
 
 func TestPreviewPath(t *testing.T) {
@@ -136,6 +139,11 @@ func TestPreviewRendersAndChecksSize(t *testing.T) {
 	f.failAll = true
 	if _, err := r.Preview(context.Background(), src, previewSpec); err == nil {
 		t.Fatal("expected ffmpeg error")
+	}
+	// Missing frame size.
+	f.failAll = false
+	if _, err := r.Preview(context.Background(), src, domain.PreviewSpec{Duration: time.Second}); err == nil {
+		t.Fatal("expected size error for a 0x0 preview")
 	}
 	// Cancelled while waiting for a worker.
 	ctx, cancel := context.WithCancel(context.Background())

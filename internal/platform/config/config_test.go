@@ -162,3 +162,19 @@ func TestTwitchGames(t *testing.T) {
 		}
 	}
 }
+
+func TestPreviewWidthFollowsTheFinalAspect(t *testing.T) {
+	cfg, err := Parse(nil, env(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w, h := cfg.Render.PreviewWidth(), cfg.Render.PreviewHeight; w != 480 || h != 854 {
+		t.Fatalf("default preview = %dx%d, want 480x854", w, h)
+	}
+	if w := (Render{Width: 1080, Height: 1920, PreviewHeight: 1280}).PreviewWidth(); w != 720 {
+		t.Fatalf("1280 high preview width = %d, want 720", w)
+	}
+	if w := (Render{PreviewHeight: 854}).PreviewWidth(); w != 0 {
+		t.Fatalf("no final size: width = %d, want 0", w)
+	}
+}

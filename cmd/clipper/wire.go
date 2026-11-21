@@ -69,12 +69,30 @@ func detectionConfig(c *config.Config) app.DetectionConfig {
 	}
 }
 
-// produceConfig maps the render/editor settings to the production use case.
-func produceConfig(c *config.Config) app.ProduceConfig {
+// streamerMap indexes the allowlist by login (layouts for the renders).
+func streamerMap(c *config.Config) map[string]domain.Streamer {
 	streamers := map[string]domain.Streamer{}
 	for _, s := range c.DomainStreamers() {
 		streamers[s.Login] = s
 	}
+	return streamers
+}
+
+// previewConfig maps the render settings to the vertical preview.
+func previewConfig(c *config.Config) app.PreviewConfig {
+	return app.PreviewConfig{
+		Duration:  c.Render.PreviewDuration.D(),
+		Width:     c.Render.PreviewWidth(),
+		Height:    c.Render.PreviewHeight,
+		FPS:       c.Render.FPS,
+		MaxBytes:  int64(c.Render.MaxFileBytes),
+		Streamers: streamerMap(c),
+	}
+}
+
+// produceConfig maps the render/editor settings to the production use case.
+func produceConfig(c *config.Config) app.ProduceConfig {
+	streamers := streamerMap(c)
 	p := c.Editor.Pricing
 	return app.ProduceConfig{
 		MinDuration:      c.Render.MinDuration.D(),

@@ -17,14 +17,17 @@ import (
 const stackTopShare = 0.35
 
 // filterGraph builds the -filter_complex graph that arranges the 16:9 source
-// in the vertical frame and burns the ASS subtitles.
+// in the vertical frame and burns the ASS subtitles (none when assPath is
+// empty, as in previews).
 //
 // The chain starts with setpts=PTS-STARTPTS: with -filter_complex, ffmpeg does
 // not remove the input start time (1.4 s in MPEG-TS) from the video while the
 // directly mapped audio starts at 0, which would shift the video.
 func filterGraph(layout domain.Layout, stack domain.StackRegions, w, h, fps int, assPath string) string {
-	sub := fmt.Sprintf("ass=filename='%s'", assPath)
-	tail := fmt.Sprintf("fps=%d,setsar=1,format=yuv420p,%s[v]", fps, sub)
+	tail := fmt.Sprintf("fps=%d,setsar=1,format=yuv420p[v]", fps)
+	if assPath != "" {
+		tail = fmt.Sprintf("fps=%d,setsar=1,format=yuv420p,ass=filename='%s'[v]", fps, assPath)
+	}
 	switch layout {
 	case domain.LayoutStack:
 		top := int(float64(h)*stackTopShare) / 2 * 2

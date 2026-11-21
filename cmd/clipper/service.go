@@ -107,11 +107,7 @@ func runService(_ []string, stderr io.Writer) error {
 	renderer := resilience.NewRenderer(rend, resilience.FFmpegPolicy, rdeps)
 	notifier := resilience.NewNotifier(tg.notifier, resilience.NetworkPolicy, rdeps)
 	ttl := cfg.Approval.TTL.D()
-	sendPreview := app.NewSendPreview(app.PreviewConfig{
-		Duration: cfg.Render.PreviewDuration.D(),
-		Height:   cfg.Render.PreviewHeight,
-		MaxBytes: int64(cfg.Render.MaxFileBytes),
-	}, repo, renderer, notifier, clk, log, prom, errLog)
+	sendPreview := app.NewSendPreview(previewConfig(cfg), repo, renderer, notifier, clk, log, prom, errLog)
 	detectMoment := app.NewDetectMoment(detectionConfig(cfg), repo, newClipID, clk, log,
 		app.WithCapture(media), app.WithDetectMetrics(prom),
 		app.WithClipHandler(func(ctx context.Context, c *domain.Clip) {

@@ -170,14 +170,10 @@ func (u *ProduceFinalClip) edit(ctx context.Context, c *domain.Clip, log *slog.L
 		}
 	}
 
-	st := u.cfg.Streamers[c.Streamer]
-	layout := st.Layout
-	if !layout.Valid() {
-		layout = domain.LayoutBlur
-	}
+	layout, stack := layoutOf(u.cfg.Streamers, c.Streamer)
 	spec := domain.RenderSpec{
 		ClipID: c.ID, Streamer: c.Streamer, Start: plan.Start, End: plan.End,
-		Width: u.cfg.Width, Height: u.cfg.Height, FPS: u.cfg.FPS, Layout: layout, Stack: st.Stack,
+		Width: u.cfg.Width, Height: u.cfg.Height, FPS: u.cfg.FPS, Layout: layout, Stack: stack,
 		Headline: plan.Headline, Captions: plan.Captions, Words: transcript.Between(plan.Start, plan.End), MaxBytes: u.cfg.MaxBytes,
 	}
 	t1 := u.clock.Now()
@@ -314,4 +310,14 @@ func (u *ProduceFinalClip) fail(ctx context.Context, id domain.ClipID, cause err
 		}
 	}
 	return err
+}
+
+// layoutOf returns the vertical layout of a streamer; unknown streamers and
+// invalid layouts fall back to blur.
+func layoutOf(streamers map[string]domain.Streamer, login string) (domain.Layout, domain.StackRegions) {
+	st := streamers[login]
+	if !st.Layout.Valid() {
+		return domain.LayoutBlur, st.Stack
+	}
+	return st.Layout, st.Stack
 }

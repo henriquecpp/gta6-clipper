@@ -37,7 +37,7 @@ func Defaults() *Config {
 			MinDuration:      dur(15 * time.Second),
 			MaxDuration:      dur(60 * time.Second),
 			MaxFileBytes:     45 << 20,
-			PreviewHeight:    480,
+			PreviewHeight:    854,
 			PreviewDuration:  dur(40 * time.Second),
 			Font:             "Noto Sans",
 			MaxLineChars:     28,

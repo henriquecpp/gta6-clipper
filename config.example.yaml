@@ -43,7 +43,7 @@ render:
   min_duration: 15s
   max_duration: 60s
   max_file_bytes: 45MiB
-  preview_height: 480
+  preview_height: 854       # vertical preview (480x854), same layout as the final video
   preview_duration: 40s
   font: Noto Sans
   max_line_chars: 28

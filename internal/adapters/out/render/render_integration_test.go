@@ -60,13 +60,14 @@ func renderPreview(t *testing.T, encoder string) *Renderer {
 	t.Helper()
 	r := New(context.Background(), Config{Encoder: encoder, Threads: 2}, WithLogger(slog.New(slog.DiscardHandler)))
 	src := copySample(t)
-	spec := domain.PreviewSpec{Start: 5 * time.Second, Duration: 20 * time.Second, Height: 480, MaxBytes: 45 << 20}
+	spec := domain.PreviewSpec{Start: 5 * time.Second, Duration: 20 * time.Second, Width: 480, Height: 854, FPS: 30,
+		Layout: domain.LayoutBlur, MaxBytes: 45 << 20}
 	ref, err := r.Preview(context.Background(), src, spec)
 	if err != nil {
 		t.Fatal(err)
 	}
 	dur, w, h := probe(t, string(ref))
-	if h != 480 || w < 850 || w > 856 || dur < 19.5 || dur > 20.5 {
+	if w != 480 || h != 854 || dur < 19.5 || dur > 20.5 {
 		t.Fatalf("preview %dx%d %.2fs", w, h, dur)
 	}
 	return r

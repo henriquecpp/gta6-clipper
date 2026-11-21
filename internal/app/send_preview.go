@@ -14,8 +14,13 @@ import (
 // PreviewConfig configures previews.
 type PreviewConfig struct {
 	Duration time.Duration
+	// Width and Height are the vertical preview frame.
+	Width    int
 	Height   int
+	FPS      int
 	MaxBytes int64
+	// Streamers gives the layout of each login (blur when missing).
+	Streamers map[string]domain.Streamer
 }
 
 // ErrorLog remembers the last error for /status.
@@ -77,7 +82,11 @@ func (u *SendPreview) Execute(ctx context.Context, id domain.ClipID) error {
 		return nil
 	}
 	start, length := domain.PreviewWindow(c.Window, c.Moment.Peak, u.cfg.Duration)
-	spec := domain.PreviewSpec{Start: start, Duration: length, Height: u.cfg.Height, MaxBytes: u.cfg.MaxBytes}
+	layout, stack := layoutOf(u.cfg.Streamers, c.Streamer)
+	spec := domain.PreviewSpec{
+		Start: start, Duration: length, Width: u.cfg.Width, Height: u.cfg.Height, FPS: u.cfg.FPS,
+		Layout: layout, Stack: stack, MaxBytes: u.cfg.MaxBytes,
+	}
 
 	t0 := u.clock.Now()
 	preview, err := u.renderer.Preview(ctx, c.SourceMedia, spec)

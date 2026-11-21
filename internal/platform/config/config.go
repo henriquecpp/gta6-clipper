@@ -104,11 +104,20 @@ type Render struct {
 	MinDuration      Duration `yaml:"min_duration"`
 	MaxDuration      Duration `yaml:"max_duration"`
 	MaxFileBytes     ByteSize `yaml:"max_file_bytes"`
-	PreviewHeight    int      `yaml:"preview_height"`
+	PreviewHeight    int      `yaml:"preview_height"` // vertical preview; width follows width/height
 	PreviewDuration  Duration `yaml:"preview_duration"`
 	Font             string   `yaml:"font"`
 	MaxLineChars     int      `yaml:"max_line_chars"`
 	HeadlineMaxChars int      `yaml:"headline_max_chars"`
+}
+
+// PreviewWidth is the width of the vertical preview: the final aspect ratio at
+// PreviewHeight, rounded down to an even number (yuv420p needs even sizes).
+func (r Render) PreviewWidth() int {
+	if r.Height <= 0 {
+		return 0
+	}
+	return r.PreviewHeight * r.Width / r.Height / 2 * 2
 }
 
 // Whisper settings.

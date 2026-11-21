@@ -3,11 +3,17 @@ package domain
 import "time"
 
 // PreviewSpec describes the low-resolution preview cut from a retained file.
-// Start and Duration are relative to the start of the retained media.
+// Start and Duration are relative to the start of the retained media. The
+// preview uses the same vertical layout as the final video, at Width x Height,
+// so what is approved looks like the short that will be delivered.
 type PreviewSpec struct {
 	Start    time.Duration
 	Duration time.Duration
+	Width    int
 	Height   int
+	FPS      int
+	Layout   Layout
+	Stack    StackRegions
 	MaxBytes int64
 }
 

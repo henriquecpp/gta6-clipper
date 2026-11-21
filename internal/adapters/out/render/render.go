@@ -138,16 +138,16 @@ func previewPath(src domain.MediaRef) string {
 
 func secs(d time.Duration) string { return strconv.FormatFloat(d.Seconds(), 'f', 3, 64) }
 
-// previewArgs cuts [start, start+duration] of src into a small 480p MP4.
-func previewArgs(src, out string, spec domain.PreviewSpec, encoder string, threads int) []string {
+// previewArgs cuts [start, start+duration] of src into a small vertical MP4
+// with the same layout as the final video (graph from filterGraph).
+func previewArgs(src, out, graph string, spec domain.PreviewSpec, encoder string, threads int) []string {
 	args := []string{
 		"-hide_banner", "-loglevel", "error", "-y",
 		"-ss", secs(spec.Start),
 		"-i", src,
 		"-t", secs(spec.Duration),
-		// setpts: MPEG-TS input keeps its 1.4 s start offset on the filtered
-		// video otherwise, shifting it against the audio.
-		"-vf", fmt.Sprintf("setpts=PTS-STARTPTS,scale=-2:%d,format=yuv420p", spec.Height),
+		"-filter_complex", graph,
+		"-map", "[v]", "-map", "0:a:0?",
 	}
 	if encoder == EncoderNVENC {
 		args = append(args, "-c:v", EncoderNVENC, "-preset", "p4", "-rc", "vbr", "-cq", "30", "-b:v", "0",
@@ -169,8 +169,16 @@ func (r *Renderer) Preview(ctx context.Context, src domain.MediaRef, spec domain
 		return "", err
 	}
 	defer func() { <-r.previews }()
+	if spec.Width <= 0 || spec.Height <= 0 {
+		return "", fmt.Errorf("render preview of %s: invalid size %dx%d", src, spec.Width, spec.Height)
+	}
+	fps := spec.FPS
+	if fps <= 0 {
+		fps = 30
+	}
 	out := previewPath(src)
-	if _, err := r.run(ctx, previewArgs(string(src), out, spec, r.encoder, r.cfg.Threads)...); err != nil {
+	graph := filterGraph(spec.Layout, spec.Stack, spec.Width, spec.Height, fps, "")
+	if _, err := r.run(ctx, previewArgs(string(src), out, graph, spec, r.encoder, r.cfg.Threads)...); err != nil {
 		_ = os.Remove(out) // partial output
 		return "", fmt.Errorf("render preview of %s: %w", src, err)
 	}

@@ -34,7 +34,9 @@ func newPreviewEnv(t *testing.T) *previewEnv {
 	e := &previewEnv{repo: fakes.NewClipRepo(), media: fakes.NewMediaCapture(), notifier: &fakes.Notifier{},
 		clock: fakes.NewClock(t0), metrics: fakes.NewMetrics(), errs: &app.ErrorLog{}}
 	e.renderer = &fakes.Renderer{Media: e.media}
-	e.send = app.NewSendPreview(app.PreviewConfig{Duration: 40 * time.Second, Height: 480, MaxBytes: 45 << 20},
+	stack := domain.StackRegions{Facecam: domain.Rect{X: 0.7, W: 0.3, H: 0.3}, Gameplay: domain.Rect{W: 1, H: 1}}
+	e.send = app.NewSendPreview(app.PreviewConfig{Duration: 40 * time.Second, Width: 480, Height: 854, FPS: 30, MaxBytes: 45 << 20,
+		Streamers: map[string]domain.Streamer{"streamer_a": {Login: "streamer_a", Layout: domain.LayoutStack, Stack: stack}}},
 		e.repo, e.renderer, e.notifier, e.clock, discardLog(), e.metrics, e.errs)
 	e.dec = app.NewDecisions(e.repo, e.media, e.notifier, e.clock, discardLog(), ttl,
 		app.WithDecisionMetrics(e.metrics),
@@ -77,8 +79,12 @@ func TestSendPreviewHappyPath(t *testing.T) {
 	}
 	spec := e.renderer.Previews[0]
 	// Window 35–125 s, peak 95 s: 40 s preview starting 26.67 s before the peak.
-	if spec.Duration != 40*time.Second || spec.Height != 480 || spec.Start < 33*time.Second || spec.Start > 34*time.Second {
+	if spec.Duration != 40*time.Second || spec.Start < 33*time.Second || spec.Start > 34*time.Second {
 		t.Fatalf("spec = %+v", spec)
+	}
+	// Vertical, with the streamer's layout: the preview looks like the final short.
+	if spec.Width != 480 || spec.Height != 854 || spec.FPS != 30 || spec.Layout != domain.LayoutStack || spec.Stack.Facecam.X != 0.7 {
+		t.Fatalf("preview frame = %+v", spec)
 	}
 	if len(e.metrics.Latency) != 1 || e.metrics.Latency[0] != 25*time.Second {
 		t.Fatalf("preview latency = %v, want 25 s (peak → preview)", e.metrics.Latency)
@@ -249,5 +255,22 @@ func TestStatusAndPending(t *testing.T) {
 	none.Record(nil, t0)
 	if msg, _ := none.Last(); msg != "" {
 		t.Fatal("nil error recorded")
+	}
+}
+
+func TestSendPreviewUnknownStreamerUsesBlur(t *testing.T) {
+	e := newPreviewEnv(t)
+	c := contracttest.FullClip("c9", t0)
+	c.Streamer = "not_in_config"
+	c.PeakAt = t0.Add(-20 * time.Second)
+	e.media.Add(c.SourceMedia)
+	if err := e.repo.Save(context.Background(), c); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.send.Execute(context.Background(), c.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.renderer.Previews[0].Layout; got != domain.LayoutBlur {
+		t.Fatalf("layout = %q, want blur", got)
 	}
 }
