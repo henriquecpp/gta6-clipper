@@ -198,7 +198,10 @@ func TestCloneIsDeep(t *testing.T) {
 	cp.Moment.Values[SignalVoice] = 99
 	cp.Timeline[0].Voice = 99
 	cp.StateTimes[StateDetected] = time.Time{}
-	if c.Moment.Values[SignalVoice] == 99 || c.Timeline[0].Voice == 99 || c.StateTimes[StateDetected].IsZero() {
+	c.Moment.ClipTitles = []string{"a"}
+	cp = c.Clone()
+	cp.Moment.ClipTitles[0] = "b"
+	if c.Moment.Values[SignalVoice] == 99 || c.Timeline[0].Voice == 99 || c.StateTimes[StateDetected].IsZero() || c.Moment.ClipTitles[0] != "a" {
 		t.Fatal("clone shares memory")
 	}
 	var nilClip *Clip

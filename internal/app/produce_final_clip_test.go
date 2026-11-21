@@ -108,7 +108,7 @@ func TestProduceHappyPath(t *testing.T) {
 	}
 	req := e.editor.Requests[0]
 	if req.Constraints.Peak != 60*time.Second || req.Constraints.WindowDuration != 90*time.Second || req.Language != "en" ||
-		req.OutputLanguage != "pt-BR" || req.Signals[0].Pos != 0 || req.Retry != nil {
+		req.OutputLanguage != "pt-BR" || req.Signals[0].Pos != 0 || req.Retry != nil || len(req.ViewerClipTitles) != 2 {
 		t.Fatalf("editor request = %+v", req)
 	}
 	if len(e.notifier.Finals) != 1 || e.notifier.Finals[0].Text != got.PostText {

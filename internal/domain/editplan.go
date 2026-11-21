@@ -55,9 +55,12 @@ type EditRequest struct {
 	OutputLanguage string
 	Transcript     Transcript
 	// Signals has one point per second, Pos relative to the window start.
-	Signals     []SignalPoint
-	Constraints EditConstraints
-	Retry       *EditRetry
+	Signals []SignalPoint
+	// ViewerClipTitles are the titles viewers gave to their Twitch clips of
+	// the moment (hints for the headline; may be jokes or unrelated).
+	ViewerClipTitles []string
+	Constraints      EditConstraints
+	Retry            *EditRetry
 }
 
 // ProposedCaption is a caption as proposed by the editor (seconds).

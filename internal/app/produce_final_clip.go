@@ -209,7 +209,7 @@ func (u *ProduceFinalClip) plan(ctx context.Context, c *domain.Clip, t domain.Tr
 	req := domain.EditRequest{
 		ClipID: c.ID, Streamer: c.Streamer, Game: c.Game, StreamTitle: c.StreamTitle,
 		Language: t.Language, OutputLanguage: u.cfg.OutputLanguage, Transcript: t,
-		Signals: relativeSignals(c), Constraints: cons,
+		Signals: relativeSignals(c), ViewerClipTitles: c.Moment.ClipTitles, Constraints: cons,
 	}
 	var total domain.Usage
 	for attempt := 0; attempt < 2; attempt++ {

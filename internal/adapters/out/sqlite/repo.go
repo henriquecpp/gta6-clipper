@@ -192,6 +192,7 @@ type signalsJSON struct {
 	Values      map[string]float64 `json:"values,omitempty"`
 	ViewerClips int                `json:"viewer_clips,omitempty"`
 	Late        bool               `json:"late,omitempty"`
+	ClipTitles  []string           `json:"clip_titles,omitempty"`
 	Timeline    []pointJSON        `json:"timeline,omitempty"`
 }
 
@@ -203,7 +204,7 @@ type pointJSON struct {
 }
 
 func encodeSignals(c *domain.Clip) (string, error) {
-	s := signalsJSON{ViewerClips: c.Moment.ViewerClips, Late: c.Moment.Late}
+	s := signalsJSON{ViewerClips: c.Moment.ViewerClips, Late: c.Moment.Late, ClipTitles: c.Moment.ClipTitles}
 	if len(c.Moment.Values) > 0 {
 		s.Values = make(map[string]float64, len(c.Moment.Values))
 		for k, v := range c.Moment.Values {
@@ -245,6 +246,7 @@ func toDomain(row sqlcgen.Clip) (*domain.Clip, error) {
 			Score:       row.Score,
 			ViewerClips: sig.ViewerClips,
 			Late:        sig.Late,
+			ClipTitles:  sig.ClipTitles,
 		},
 		LiveOffset:     time.Duration(row.LiveOffsetMs) * time.Millisecond,
 		Window:         domain.Window{From: msPos(row.WindowFromMs), To: msPos(row.WindowToMs)},

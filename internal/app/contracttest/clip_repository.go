@@ -31,6 +31,7 @@ func FullClip(id domain.ClipID, created time.Time) *domain.Clip {
 			Score:       4.25,
 			Values:      map[domain.SignalKind]float64{domain.SignalVoice: 3.8, domain.SignalChat: 5.1, domain.SignalClips: 2},
 			ViewerClips: 2,
+			ClipTitles:  []string{"ele caiu do prédio kkkk", "fuga épica"},
 		},
 		Window: domain.Window{From: domain.StreamPos(35 * time.Second), To: domain.StreamPos(125 * time.Second)},
 		Timeline: []domain.SignalPoint{

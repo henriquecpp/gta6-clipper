@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -412,5 +413,43 @@ func TestDetectMomentSessionLifecycle(t *testing.T) {
 	}
 	if err := h.d.ObserveClips(ctx, "nope", lateClips(0, 3, "z")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDetectMomentKeepsViewerClipTitles(t *testing.T) {
+	h := newHarness(t, true)
+	ctx := context.Background()
+	h.run(0, 200*time.Second, shoutAt(150*time.Second), h.steadyChat)
+	// Clips observed before the moment is accepted: the default title (the
+	// stream title) says nothing; custom titles are kept, most viewed first.
+	clips := lateClips(150*time.Second, 3, "a")
+	clips[0].Title, clips[0].ViewCount = testLive.Title, 50
+	clips[1].Title, clips[1].ViewCount = "  ele caiu   do prédio KKKK ", 2
+	clips[2].Title, clips[2].ViewCount = "fuga épica", 9
+	far := lateClips(100*time.Second, 1, "far")
+	far[0].Title = "outro momento"
+	if err := h.d.ObserveClips(ctx, testLive.ID, append(clips, far...)); err != nil {
+		t.Fatal(err)
+	}
+	h.run(200*time.Second, 205*time.Second, steadyVoice, h.steadyChat)
+	got, _ := h.repo.ListByState(ctx, domain.StateDetected)
+	if len(got) != 1 {
+		t.Fatalf("clips = %d", len(got))
+	}
+	if want := []string{"fuga épica", "ele caiu do prédio KKKK"}; !slices.Equal(got[0].Moment.ClipTitles, want) {
+		t.Fatalf("titles = %q, want %q", got[0].Moment.ClipTitles, want)
+	}
+
+	// A clip made after the preview was sent adds its title to the stored clip;
+	// the same title again (another case) is not duplicated.
+	more := lateClips(151*time.Second, 2, "b")
+	more[0].Title = "PERSEGUIÇÃO INSANA"
+	more[1].Title = "Fuga Épica"
+	if err := h.d.ObserveClips(ctx, testLive.ID, more); err != nil {
+		t.Fatal(err)
+	}
+	c, _ := h.repo.Get(ctx, got[0].ID)
+	if want := []string{"fuga épica", "ele caiu do prédio KKKK", "PERSEGUIÇÃO INSANA"}; !slices.Equal(c.Moment.ClipTitles, want) {
+		t.Fatalf("titles after the late clip = %q, want %q", c.Moment.ClipTitles, want)
 	}
 }

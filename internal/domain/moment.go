@@ -1,5 +1,11 @@
 package domain
 
+import (
+	"slices"
+	"strings"
+	"unicode/utf8"
+)
+
 // SignalKind identifies a detection signal.
 type SignalKind string
 
@@ -50,11 +56,61 @@ type Moment struct {
 	ViewerClips int
 	// Late is true when the moment came only from the late clip signal.
 	Late bool
+	// ClipTitles are the titles viewers gave to their Twitch clips of this
+	// moment (most viewed first, at most MaxClipTitles). They are hints for
+	// the editor's headline, not facts.
+	ClipTitles []string
+}
+
+// MaxClipTitles bounds the viewer clip titles kept per moment.
+const MaxClipTitles = 5
+
+// maxClipTitleRunes bounds one title (Twitch does not document a limit).
+const maxClipTitleRunes = 100
+
+// CleanClipTitle normalizes a viewer clip title and returns "" when it says
+// nothing about the moment: empty, or equal to the stream title, which Twitch
+// uses as the default title of every clip.
+func CleanClipTitle(title, streamTitle string) string {
+	t := strings.Join(strings.Fields(title), " ")
+	if t == "" || strings.EqualFold(t, strings.Join(strings.Fields(streamTitle), " ")) {
+		return ""
+	}
+	if utf8.RuneCountInString(t) > maxClipTitleRunes {
+		t = strings.TrimSpace(string([]rune(t)[:maxClipTitleRunes])) + "…"
+	}
+	return t
+}
+
+// MergeClipTitles appends the new titles that are not there yet (ignoring
+// case), keeping at most MaxClipTitles. Empty titles are skipped.
+func MergeClipTitles(titles []string, add ...string) []string {
+	out := titles
+	for _, t := range add {
+		if len(out) >= MaxClipTitles {
+			break
+		}
+		if t == "" || containsFold(out, t) {
+			continue
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+func containsFold(list []string, s string) bool {
+	for _, x := range list {
+		if strings.EqualFold(x, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // Clone returns a deep copy.
 func (m Moment) Clone() Moment {
 	c := m
+	c.ClipTitles = slices.Clone(m.ClipTitles)
 	if m.Values != nil {
 		c.Values = make(map[SignalKind]float64, len(m.Values))
 		for k, v := range m.Values {

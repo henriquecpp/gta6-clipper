@@ -187,6 +187,13 @@ func userMessage(req domain.EditRequest) string {
 	for _, s := range req.Signals {
 		fmt.Fprintf(&b, "%d %.1f %.1f %.0f\n", int(time.Duration(s.Pos)/time.Second), s.Voice, s.Chat, s.Clips)
 	}
+	b.WriteString("\n## Viewer clip titles\n")
+	if len(req.ViewerClipTitles) == 0 {
+		b.WriteString("(none)\n")
+	}
+	for _, t := range req.ViewerClipTitles {
+		fmt.Fprintf(&b, "- %s\n", t)
+	}
 	return b.String()
 }
 

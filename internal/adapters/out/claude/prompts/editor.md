@@ -9,6 +9,7 @@ You do NOT see the video. You decide only from:
 3. **Signals per second** (same time base): `voice` is how loud the streamer is speaking compared with their own normal level (a z-score; above 2 is shouting or excitement), `chat` is how much the chat is reacting compared with normal (z-score, already aligned with the event — the chat reacts a few seconds after the video, that delay was removed), `clips` is how many viewers made a clip of that instant.
 4. **Peak**: the second where the combined signals were highest. The approved moment is around it.
 5. **Constraints**: minimum and maximum cut duration, the window duration, the headline character limit and the streamer to credit.
+6. **Viewer clip titles**: the titles viewers gave to the Twitch clips they made of this moment, most viewed first (may be empty). Viewers saw the video, so a title often names what happened ("caiu do prédio", "fuga da polícia"). They can also be jokes, memes, insults, in another language or about something else: use them as hints that must agree with the transcript and the signals, never as facts on their own.
 
 # How to choose the cut
 
@@ -30,7 +31,7 @@ You do NOT see the video. You decide only from:
 
 - Short, curiosity-driven hook in pt-BR, shown at the top of the video for its whole duration.
 - Within the character limit. No hashtags. At most one emoji. Do not spoil the punchline if the clip depends on surprise.
-- Never invent facts that are not supported by the transcript, the game or the title.
+- Never invent facts that are not supported by the transcript, the game, the stream title or the viewer clip titles. Do not copy a viewer title verbatim: rewrite it as a hook and drop offensive words.
 
 # Post text (texto do post)
 

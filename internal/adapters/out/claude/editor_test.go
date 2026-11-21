@@ -208,8 +208,13 @@ func TestPlanAPIError(t *testing.T) {
 	if (&APIError{Status: 400}).Temporary() {
 		t.Fatal("400 is permanent")
 	}
-	if !strings.Contains(userMessage(domain.EditRequest{}), "(no speech detected)") {
-		t.Fatal("empty transcript")
+	if msg := userMessage(domain.EditRequest{}); !strings.Contains(msg, "(no speech detected)") || !strings.Contains(msg, "## Viewer clip titles\n(none)") {
+		t.Fatalf("empty request message:\n%s", msg)
+	}
+	req := request()
+	req.ViewerClipTitles = []string{"caiu do prédio kkkk", "fuga épica"}
+	if msg := userMessage(req); !strings.Contains(msg, "## Viewer clip titles\n- caiu do prédio kkkk\n- fuga épica\n") {
+		t.Fatalf("titles missing from the message:\n%s", msg)
 	}
 }
 

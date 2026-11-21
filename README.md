@@ -30,11 +30,12 @@ Instruções do projeto: [CLAUDE.md](CLAUDE.md)
 5. [Obtendo os tokens](#obtendo-os-tokens)
 6. [Primeira execução](#primeira-execução)
 7. [Operação](#operação)
-8. [Ajuste da detecção](#ajuste-da-detecção)
-9. [Observabilidade](#observabilidade)
-10. [Troubleshooting](#troubleshooting)
-11. [Riscos legais](#riscos-legais)
-12. [Desenvolvimento](#desenvolvimento)
+8. [Formato para Shorts](#formato-para-shorts)
+9. [Ajuste da detecção](#ajuste-da-detecção)
+10. [Observabilidade](#observabilidade)
+11. [Troubleshooting](#troubleshooting)
+12. [Riscos legais](#riscos-legais)
+13. [Desenvolvimento](#desenvolvimento)
 
 ---
 
@@ -290,6 +291,27 @@ Ele captura por 60 s, mostra frames de áudio/fala, retém 20 s e estima a latê
 - **Disco:** o buffer (tmpfs) é limitado por `capture.buffer_duration` e `capture.buffer_max_bytes`; janelas
   retidas e prévias ficam no volume `clipper-pending` e são apagadas ao descartar, expirar ou entregar. Os
   vídeos finais em `.\output` são seus: apague quando quiser.
+
+## Formato para Shorts
+
+O vídeo final já sai pronto para TikTok, Reels e YouTube Shorts:
+
+- **9:16, 1080×1920**, 30 ou 60 fps, H.264 (NVENC) + AAC, abaixo de `render.max_file_bytes` (45 MiB).
+- **Duração** entre `render.min_duration` e `render.max_duration` (15–60 s), com começo, meio e fim escolhidos
+  pelo Claude a partir da fala e dos sinais.
+- **Manchete** no topo e **legenda palavra por palavra** em PT-BR, fora das áreas cobertas pelos botões das
+  plataformas (20% de baixo e a lateral direita).
+- **Texto do post** com crédito ao streamer e hashtags.
+- **Títulos dos clipes dos espectadores** (campo `title` do Get Clips da Twitch): o app guarda os títulos que os
+  espectadores deram aos clipes daquele momento (até 5, os mais vistos primeiro, ignorando o título padrão, que
+  é o título da live) e o Claude usa como pista para a manchete. Aparecem no log como `viewer clip titles added`.
+
+**Por que não usar o clipe vertical da própria Twitch:** a API da Twitch só entrega a versão vertical de um
+clipe (`portrait_download_url` no Get Clips Download) e só cria clipes de VOD (Create Clip From VOD) para o
+**dono do canal ou um editor** dele, e a versão vertical depende de a live ser transmitida em formato duplo.
+Para canais de terceiros não há como obter vídeo vertical pela API; por isso o app recorta e monta o 9:16
+sozinho. Criar clipes com Create Clip (título e duração de 5–60 s) também não serve: o clipe é criado no
+canal do streamer, em nome da sua conta, e o projeto nunca publica nada sozinho.
 
 ## Ajuste da detecção
 

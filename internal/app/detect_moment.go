@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -103,6 +104,13 @@ type acceptedMoment struct {
 	clips  int
 }
 
+// titleNote is a useful viewer clip title at the clip's estimated position.
+type titleNote struct {
+	pos   domain.StreamPos
+	title string
+	views int
+}
+
 type session struct {
 	mu       sync.Mutex
 	streamer domain.Streamer
@@ -117,6 +125,7 @@ type session struct {
 	next     domain.StreamPos // next evaluation position
 	pending  []domain.Moment  // waiting for the post-roll to be captured
 	accepted []acceptedMoment
+	titles   []titleNote // viewer clip titles still inside the buffer
 }
 
 // StartStream opens a detection session; captureStart is the wall time of
@@ -262,6 +271,7 @@ func (d *DetectMoment) accept(ctx context.Context, s *session, m domain.Moment, 
 
 	s.mu.Lock()
 	live := s.live
+	m.ClipTitles = domain.MergeClipTitles(m.ClipTitles, s.titlesNear(m.Peak, domain.StreamPos(d.cfg.Clips.GroupWindow))...)
 	peakAt := s.tl.WallTime(m.Peak)
 	liveOffset := time.Duration(0)
 	if !s.tl.StreamStart.IsZero() {
@@ -350,6 +360,27 @@ func (s *session) signalTimeline(w domain.Window) []domain.SignalPoint {
 // the latest scorer peak, moments waiting for their post-roll and accepted
 // ones. Late clusters arrive out of order, so the latest peak alone is not
 // enough (caller holds s.mu).
+func (s *session) titlesNear(pos, span domain.StreamPos) []string {
+	var near []titleNote
+	for _, n := range s.titles {
+		if absPos(n.pos-pos) <= span {
+			near = append(near, n)
+		}
+	}
+	// Most viewed first: the titles other viewers agreed with.
+	slices.SortStableFunc(near, func(a, b titleNote) int { return b.views - a.views })
+	out := make([]string, 0, len(near))
+	for _, n := range near {
+		out = append(out, n.title)
+	}
+	return out
+}
+
+// pruneTitles drops the titles of clips before from (outside the buffer).
+func (s *session) pruneTitles(from domain.StreamPos) {
+	s.titles = slices.DeleteFunc(s.titles, func(n titleNote) bool { return n.pos < from })
+}
+
 func (s *session) nearMoment(pos, cooldown domain.StreamPos) bool {
 	if last, ok := s.scorer.LastPeak(); ok && absPos(pos-last) < cooldown {
 		return true
@@ -398,11 +429,25 @@ func (d *DetectMoment) ObserveClips(ctx context.Context, id domain.StreamID, cli
 	capPos := s.tl.CapturePos(d.clock.Now())
 	s.clips.Advance(capPos)
 	added := 0
+	titles := map[domain.ClipID][]string{} // new titles for already persisted clips
 	for _, c := range clips {
-		if s.clips.Observe(c.ID, s.tl.ClipPos(c)) {
-			added++
+		pos := s.tl.ClipPos(c)
+		if !s.clips.Observe(c.ID, pos) {
+			continue
+		}
+		added++
+		t := domain.CleanClipTitle(c.Title, s.live.Title)
+		if t == "" {
+			continue
+		}
+		s.titles = append(s.titles, titleNote{pos: pos, title: t, views: c.ViewCount})
+		for _, a := range s.accepted {
+			if absPos(a.peak-pos) <= gw {
+				titles[a.clipID] = append(titles[a.clipID], t)
+			}
 		}
 	}
+	s.pruneTitles(capPos - domain.StreamPos(d.cfg.BufferDuration+d.cfg.PreRoll))
 	if added > 0 {
 		for _, cl := range s.clips.Clusters() {
 			value := min(float64(cl.Count), zmax)
@@ -467,7 +512,29 @@ func (d *DetectMoment) ObserveClips(ctx context.Context, id domain.StreamID, cli
 			errs = append(errs, err)
 		}
 	}
+	for id, t := range titles {
+		if err := d.addClipTitles(ctx, id, t); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	return errors.Join(errs...)
+}
+
+// addClipTitles records viewer clip titles on an already persisted clip.
+func (d *DetectMoment) addClipTitles(ctx context.Context, id domain.ClipID, titles []string) error {
+	return d.repo.InTx(ctx, func(ctx context.Context, repo ClipRepository) error {
+		c, err := repo.Get(ctx, id)
+		if err != nil {
+			return err
+		}
+		merged := domain.MergeClipTitles(c.Moment.ClipTitles, titles...)
+		if len(merged) == len(c.Moment.ClipTitles) {
+			return nil // nothing new, or already full
+		}
+		c.Moment.ClipTitles = merged
+		d.log.Info("viewer clip titles added", slog.String("clip_id", string(id)), slog.Any("titles", merged))
+		return repo.Save(ctx, c)
+	})
 }
 
 // boostClip records a confirmed viewer clip count on an already persisted clip.
