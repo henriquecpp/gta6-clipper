@@ -52,7 +52,15 @@ func (l telegoLogger) Errorf(format string, args ...any) {
 }
 
 // errTelegramDisabled is the failure reason of previews without Telegram.
-var errTelegramDisabled = errors.New("telegram is not configured (TELEGRAM_BOT_TOKEN / TELEGRAM_ALLOWED_CHAT_IDS)")
+var errTelegramDisabled error = notConfigured("telegram is not configured (TELEGRAM_BOT_TOKEN / TELEGRAM_ALLOWED_CHAT_IDS)")
+
+// notConfigured is the error of a port disabled in degraded mode (ADR 0016).
+type notConfigured string
+
+func (e notConfigured) Error() string { return string(e) }
+
+// Temporary tells the resilience decorators that retrying cannot help.
+func (notConfigured) Temporary() bool { return false }
 
 // disabledNotifier keeps the pipeline running without Telegram.
 type disabledNotifier struct{}

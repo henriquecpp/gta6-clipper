@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -114,5 +113,5 @@ func newEditor(c *config.Config, log *slog.Logger) app.Editor {
 type disabledEditor struct{}
 
 func (disabledEditor) Plan(context.Context, domain.EditRequest) (domain.EditProposal, domain.Usage, error) {
-	return domain.EditProposal{}, domain.Usage{}, errors.New("anthropic is not configured (ANTHROPIC_API_KEY / ANTHROPIC_MODEL)")
+	return domain.EditProposal{}, domain.Usage{}, notConfigured("anthropic is not configured (ANTHROPIC_API_KEY / ANTHROPIC_MODEL)")
 }
