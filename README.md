@@ -196,7 +196,9 @@ O app token (detecção de lives e clipes) é obtido sozinho a partir do Client 
 1. No Telegram, fale com **@BotFather** → `/newbot` → copie o token → `TELEGRAM_BOT_TOKEN`.
 2. Mande qualquer mensagem para o seu bot e abra no navegador
    `https://api.telegram.org/bot<TOKEN>/getUpdates`; o número em `message.chat.id` é o seu chat id →
-   `TELEGRAM_ALLOWED_CHAT_IDS` (pode listar vários, inclusive grupos, que têm id negativo).
+   `TELEGRAM_ALLOWED_CHAT_IDS` (pode listar vários, inclusive grupos, que têm id negativo). Em grupo, o bot
+   só recebe comandos dirigidos a ele: mande `/start@<usuario_do_bot>` no grupo antes do `getUpdates`, com o
+   app parado (se o app estiver rodando com o token, ele consome as mensagens primeiro).
 3. O bot usa *long polling*: não precisa abrir porta. Se o bot já tiver um webhook configurado por outro
    programa, remova com `https://api.telegram.org/bot<TOKEN>/deleteWebhook`.
 
@@ -308,6 +310,7 @@ Endpoints internos (só em `localhost`): `/healthz`, `/readyz`, `/metrics`.
 | whisper responde 503 | Ainda carregando o modelo (~10 s); o app repete. Se persistir: `task whisper:model` (modelo ausente). |
 | Lives não aparecem | `TWITCH_CLIENT_ID/SECRET` ausentes (log de modo degradado) ou login errado na allowlist; `allows_clips: false` ignora o canal. |
 | "twitch user token unavailable/invalid" | Rode `task auth:twitch`. Sem ele só o chat fica desligado. |
+| "group chat was upgraded to a supergroup chat" / "outside the allowlist ignored" | O Telegram converteu o grupo em supergrupo (ex.: ao mudar a visibilidade do histórico) e o id mudou para `-100…`. O log mostra o novo id (`migrate to chat ID`); troque em `TELEGRAM_ALLOWED_CHAT_IDS` e rode `task up`. |
 | Prévias não chegam | Token/chat id do Telegram; mande `/status` ao bot. Webhook ativo impede o long polling (`deleteWebhook`). |
 | Clipe `failed` com "anthropic is not configured" | Preencha `ANTHROPIC_API_KEY`/`ANTHROPIC_MODEL` e use `/retry`. |
 | Erro 400 do Claude sobre `tool_choice` | Modelo que não aceita tool use forçado: `editor.tool_choice: auto`. |
