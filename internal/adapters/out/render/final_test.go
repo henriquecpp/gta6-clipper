@@ -38,6 +38,18 @@ func TestBuildASSGolden(t *testing.T) {
 	golden(t, "render_subtitles", BuildASS(sampleSpec(), ASSStyle{Font: "Noto Sans", MaxLineChars: 28, HeadlineLineChars: 24}))
 }
 
+func TestBuildASSHeadlineOnTheStackSeam(t *testing.T) {
+	spec := sampleSpec()
+	spec.Layout = domain.LayoutStack
+	if ass := BuildASS(spec, ASSStyle{}); !strings.Contains(ass, `Headline,,0,0,0,,{\an5\pos(540,672)}`) {
+		t.Fatalf("stack headline must sit on the camera/game seam (y=672):\n%s", ass)
+	}
+	spec.Layout = domain.LayoutBlur
+	if ass := BuildASS(spec, ASSStyle{}); strings.Contains(ass, `\pos(`) {
+		t.Fatalf("blur headline keeps the style position:\n%s", ass)
+	}
+}
+
 func TestFilterGraphsGolden(t *testing.T) {
 	stack := domain.StackRegions{Facecam: domain.Rect{X: 0.7, Y: 0, W: 0.3, H: 0.3}, Gameplay: domain.Rect{X: 0, Y: 0, W: 1, H: 1}}
 	var b strings.Builder

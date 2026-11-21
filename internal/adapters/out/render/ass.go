@@ -181,7 +181,13 @@ func BuildASS(spec domain.RenderSpec, style ASSStyle) string {
 		for i, l := range lines {
 			parts[i] = strings.Join(l, " ")
 		}
-		fmt.Fprintf(&b, "Dialogue: 1,%s,%s,Headline,,0,0,0,,%s\n", assTime(0), assTime(dur), strings.Join(parts, `\N`))
+		// In the stack layout the top of the frame is the streamer's face: the
+		// headline becomes a banner centred on the seam between camera and game.
+		pos := ""
+		if spec.Layout == domain.LayoutStack {
+			pos = fmt.Sprintf(`{\an5\pos(%d,%d)}`, w/2, stackTop(h))
+		}
+		fmt.Fprintf(&b, "Dialogue: 1,%s,%s,Headline,,0,0,0,,%s%s\n", assTime(0), assTime(dur), pos, strings.Join(parts, `\N`))
 	}
 
 	for _, c := range spec.Captions {

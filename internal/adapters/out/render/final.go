@@ -13,8 +13,13 @@ import (
 	"github.com/henriquecpp/gta6-clipper/internal/domain"
 )
 
-// Stack layout split: facecam on the top 35% of the frame, gameplay below.
+// Stack layout split: facecam on the top 35% of the frame, gameplay (most of
+// the screen) below.
 const stackTopShare = 0.35
+
+// stackTop is the height of the facecam band of the stack layout (even, for
+// yuv420p).
+func stackTop(h int) int { return int(float64(h)*stackTopShare) / 2 * 2 }
 
 // filterGraph builds the -filter_complex graph that arranges the 16:9 source
 // in the vertical frame and burns the ASS subtitles (none when assPath is
@@ -30,7 +35,7 @@ func filterGraph(layout domain.Layout, stack domain.StackRegions, w, h, fps int,
 	}
 	switch layout {
 	case domain.LayoutStack:
-		top := int(float64(h)*stackTopShare) / 2 * 2
+		top := stackTop(h)
 		bot := h - top
 		region := func(r domain.Rect) string {
 			return fmt.Sprintf("crop=iw*%s:ih*%s:iw*%s:ih*%s", ff(r.W), ff(r.H), ff(r.X), ff(r.Y))

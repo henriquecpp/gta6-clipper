@@ -172,7 +172,12 @@ twitch:
   Vale o nome exato da categoria (sem diferenciar maiúsculas) ou o id (`1867279146` = Grand Theft Auto VI).
   O padrão, se a chave não existir, é só GTA VI; `games: []` monitora qualquer jogo.
 - **Layouts:** `blur` — vídeo 16:9 no meio sobre ele mesmo ampliado e desfocado; `stack` — câmera em cima
-  (35%) e jogo embaixo, com as regiões em coordenadas normalizadas do quadro original; `crop` — recorte central.
+  (35%) e jogo embaixo (65%), com as regiões em coordenadas normalizadas do quadro original; `crop` — recorte
+  central. Para streamers com webcam, prefira `stack`: é o formato que mais funciona em shorts, e a manchete
+  vira uma faixa na divisa entre câmera e jogo, sem cobrir o rosto. As regiões são `[x, y, w, h]` de 0 a 1:
+  meça a webcam num quadro da cena de jogo do streamer (ex.: webcam de 990 a 1270 px na horizontal e de 324 a
+  500 px na vertical num quadro 1280×720 → `facecam: [0.773, 0.450, 0.219, 0.244]`). Se o streamer mudar a
+  webcam de lugar, a região precisa ser medida de novo.
   A prévia do Telegram usa o mesmo layout, em 480×854 (`render.preview_height`; a largura segue a proporção
   do vídeo final), então o que você aprova já tem a cara do short.
 - **`approval.ttl`** (6 h): prévias não decididas expiram e a mídia é apagada.
