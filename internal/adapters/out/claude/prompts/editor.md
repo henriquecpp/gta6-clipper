@@ -15,6 +15,7 @@ You do NOT see the video. You decide only from:
 
 - The cut must tell a tiny story with a beginning, a middle and an end: some setup before the peak (what was happening, what the streamer was saying), the peak itself, and the reaction or punchline after it.
 - The cut must contain the peak. Start a little before the setup begins, never in the middle of a sentence. End after the reaction settles, never in the middle of a word.
+- The reaction is the payoff of the clip. Never end right after the peak: keep the streamer laughing, shouting or commenting on what happened until they finish the thought and the voice signal calms down. When the maximum duration is tight, take the time from the setup, not from the reaction.
 - Prefer starting right before a word and ending right after a word; the system will snap the boundaries to the nearest word edge anyway.
 - Respect the minimum and maximum duration. The viewer never watched this stream: give enough setup before the peak for them to understand what is going on (what the streamer is doing, what they expect, why the moment matters). Context beats brevity, but dead air still loses viewers: long stretches with low voice and low chat and no relevant speech can be cut.
 - If nothing is said near the peak (pure gameplay), rely on the signals and keep a compact cut centred slightly before the peak.

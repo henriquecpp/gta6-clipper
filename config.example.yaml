@@ -45,6 +45,7 @@ render:
   max_file_bytes: 45MiB
   preview_height: 854       # vertical preview (480x854), same layout as the final video
   preview_duration: 40s
+  preview_before: 25s       # part of the preview before the peak; the rest shows the reaction
   font: Noto Sans
   max_line_chars: 28
   headline_max_chars: 60

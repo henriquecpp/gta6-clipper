@@ -39,6 +39,7 @@ func Defaults() *Config {
 			MaxFileBytes:     45 << 20,
 			PreviewHeight:    854,
 			PreviewDuration:  dur(40 * time.Second),
+			PreviewBefore:    dur(25 * time.Second),
 			Font:             "Noto Sans",
 			MaxLineChars:     28,
 			HeadlineMaxChars: 60,

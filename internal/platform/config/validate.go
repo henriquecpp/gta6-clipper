@@ -97,6 +97,11 @@ func (c *Config) Validate() error {
 		add("render.preview_height must be an even number >= 144")
 	}
 	pos("render.preview_duration", r.PreviewDuration)
+	pos("render.preview_before", r.PreviewBefore)
+	if r.PreviewBefore >= r.PreviewDuration {
+		add("render.preview_before (%s) must be shorter than render.preview_duration (%s), or the preview ends at the peak",
+			r.PreviewBefore.D(), r.PreviewDuration.D())
+	}
 	if r.MaxLineChars < 10 {
 		add("render.max_line_chars must be >= 10")
 	}

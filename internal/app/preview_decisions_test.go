@@ -35,7 +35,7 @@ func newPreviewEnv(t *testing.T) *previewEnv {
 		clock: fakes.NewClock(t0), metrics: fakes.NewMetrics(), errs: &app.ErrorLog{}}
 	e.renderer = &fakes.Renderer{Media: e.media}
 	stack := domain.StackRegions{Facecam: domain.Rect{X: 0.7, W: 0.3, H: 0.3}, Gameplay: domain.Rect{W: 1, H: 1}}
-	e.send = app.NewSendPreview(app.PreviewConfig{Duration: 40 * time.Second, Width: 480, Height: 854, FPS: 30, MaxBytes: 45 << 20,
+	e.send = app.NewSendPreview(app.PreviewConfig{Duration: 40 * time.Second, Before: 25 * time.Second, Width: 480, Height: 854, FPS: 30, MaxBytes: 45 << 20,
 		Streamers: map[string]domain.Streamer{"streamer_a": {Login: "streamer_a", Layout: domain.LayoutStack, Stack: stack}}},
 		e.repo, e.renderer, e.notifier, e.clock, discardLog(), e.metrics, e.errs)
 	e.dec = app.NewDecisions(e.repo, e.media, e.notifier, e.clock, discardLog(), ttl,
@@ -78,8 +78,8 @@ func TestSendPreviewHappyPath(t *testing.T) {
 		t.Fatalf("clip = %+v", got)
 	}
 	spec := e.renderer.Previews[0]
-	// Window 35–125 s, peak 95 s: 40 s preview starting 26.67 s before the peak.
-	if spec.Duration != 40*time.Second || spec.Start < 33*time.Second || spec.Start > 34*time.Second {
+	// Window 35–125 s, peak 95 s (60 s in): 25 s before the peak, 15 s of reaction after it.
+	if spec.Duration != 40*time.Second || spec.Start != 35*time.Second {
 		t.Fatalf("spec = %+v", spec)
 	}
 	// Vertical, with the streamer's layout: the preview looks like the final short.

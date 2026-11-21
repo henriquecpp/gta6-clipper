@@ -132,11 +132,12 @@ func dryRun(args []string, out io.Writer) error {
 }
 
 // offlineProposal builds a deterministic edit without AI: a cut of about
-// offlineCut with the peak at one third from the end, and captions made of
-// the transcribed words (up to 5 words or 3 s each, not overlapping).
+// offlineCut with the peak at 40% of it (most of the cut is the reaction),
+// and captions made of the transcribed words (up to 5 words or 3 s each, not
+// overlapping).
 func offlineProposal(t domain.Transcript, c domain.EditConstraints) domain.EditProposal {
 	length := min(max(offlineCut, c.MinDuration), c.MaxDuration, c.WindowDuration)
-	start := max(0, min(c.Peak-length*2/3, c.WindowDuration-length))
+	start := max(0, min(c.Peak-length*2/5, c.WindowDuration-length))
 	end := start + length
 
 	var caps []domain.ProposedCaption

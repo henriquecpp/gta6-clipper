@@ -179,7 +179,9 @@ twitch:
   500 px na vertical num quadro 1280×720 → `facecam: [0.773, 0.450, 0.219, 0.244]`). Se o streamer mudar a
   webcam de lugar, a região precisa ser medida de novo.
   A prévia do Telegram usa o mesmo layout, em 480×854 (`render.preview_height`; a largura segue a proporção
-  do vídeo final), então o que você aprova já tem a cara do short.
+  do vídeo final), então o que você aprova já tem a cara do short. Ela dura `render.preview_duration`, com
+  `render.preview_before` (25 s) antes do pico e o resto depois, para mostrar a reação do streamer; o trecho
+  depois do pico só existe até `detection.post_roll`.
 - **`approval.ttl`** (6 h): prévias não decididas expiram e a mídia é apagada.
 - **`render`**: resolução, fps (30/60), duração mínima/máxima do corte, `max_file_bytes` (≤ 50 MiB, limite
   do Telegram), fonte e caracteres por linha da legenda.

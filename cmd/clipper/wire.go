@@ -82,6 +82,7 @@ func streamerMap(c *config.Config) map[string]domain.Streamer {
 func previewConfig(c *config.Config) app.PreviewConfig {
 	return app.PreviewConfig{
 		Duration:  c.Render.PreviewDuration.D(),
+		Before:    c.Render.PreviewBefore.D(),
 		Width:     c.Render.PreviewWidth(),
 		Height:    c.Render.PreviewHeight,
 		FPS:       c.Render.FPS,

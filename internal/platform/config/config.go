@@ -106,6 +106,7 @@ type Render struct {
 	MaxFileBytes     ByteSize `yaml:"max_file_bytes"`
 	PreviewHeight    int      `yaml:"preview_height"` // vertical preview; width follows width/height
 	PreviewDuration  Duration `yaml:"preview_duration"`
+	PreviewBefore    Duration `yaml:"preview_before"` // part of the preview before the peak; the rest is the reaction
 	Font             string   `yaml:"font"`
 	MaxLineChars     int      `yaml:"max_line_chars"`
 	HeadlineMaxChars int      `yaml:"headline_max_chars"`

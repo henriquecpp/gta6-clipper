@@ -14,6 +14,9 @@ import (
 // PreviewConfig configures previews.
 type PreviewConfig struct {
 	Duration time.Duration
+	// Before is how much of the preview comes before the peak; the rest shows
+	// the reaction after it.
+	Before time.Duration
 	// Width and Height are the vertical preview frame.
 	Width    int
 	Height   int
@@ -81,7 +84,7 @@ func (u *SendPreview) Execute(ctx context.Context, id domain.ClipID) error {
 	if c.State != domain.StateDetected {
 		return nil
 	}
-	start, length := domain.PreviewWindow(c.Window, c.Moment.Peak, u.cfg.Duration)
+	start, length := domain.PreviewWindow(c.Window, c.Moment.Peak, u.cfg.Duration, u.cfg.Before)
 	layout, stack := layoutOf(u.cfg.Streamers, c.Streamer)
 	spec := domain.PreviewSpec{
 		Start: start, Duration: length, Width: u.cfg.Width, Height: u.cfg.Height, FPS: u.cfg.FPS,

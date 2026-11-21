@@ -164,7 +164,7 @@ func TestPipelineEndToEnd(t *testing.T) {
 		return domain.ClipID(fmt.Sprintf("0193f1c2-0000-7000-8000-%012d", idN)), nil
 	}
 	errLog := &app.ErrorLog{}
-	sendPreview := app.NewSendPreview(app.PreviewConfig{Duration: 40 * time.Second, Width: 480, Height: 854, FPS: 30, MaxBytes: 45 << 20},
+	sendPreview := app.NewSendPreview(app.PreviewConfig{Duration: 40 * time.Second, Before: 25 * time.Second, Width: 480, Height: 854, FPS: 30, MaxBytes: 45 << 20},
 		repo, rend, notifier, clk, log, nil, errLog)
 	detectMoment := app.NewDetectMoment(app.DetectionConfig{
 		Tick: 500 * time.Millisecond,
