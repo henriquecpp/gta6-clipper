@@ -233,11 +233,12 @@ func TestStatusAndPending(t *testing.T) {
 
 	st := app.NewStatus(e.repo, e.clock, ttl, func() []domain.LiveStream { return []domain.LiveStream{{Login: "x"}} }, nil, e.errs)
 	st.SetQueue(func() int { return 2 })
+	st.SetOffGame(func() []domain.LiveStream { return []domain.LiveStream{{Login: "y", Game: "Just Chatting"}} })
 	r, err := st.Report(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Pending != 1 || r.Queue != 2 || r.CostToday != 1234 || len(r.Lives) != 1 || r.LastError != "boom" || r.ClipsToday[domain.StateEditing] != 1 {
+	if r.Pending != 1 || r.Queue != 2 || r.CostToday != 1234 || len(r.Lives) != 1 || len(r.OffGame) != 1 || r.LastError != "boom" || r.ClipsToday[domain.StateEditing] != 1 {
 		t.Fatalf("report = %+v", r)
 	}
 	p, err := st.Pending(ctx)

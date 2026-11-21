@@ -10,7 +10,10 @@ import (
 
 // StatusReport is what /status shows.
 type StatusReport struct {
-	Lives       []domain.LiveStream
+	Lives []domain.LiveStream
+	// OffGame are allowlisted lives on air in a category outside the games
+	// filter, which are not monitored.
+	OffGame     []domain.LiveStream
 	Pending     int
 	Queue       int
 	LastError   string
@@ -31,13 +34,14 @@ type PendingClip struct {
 
 // Status answers the /status and /pending commands.
 type Status struct {
-	repo   ClipRepository
-	clock  Clock
-	ttl    time.Duration
-	lives  func() []domain.LiveStream
-	queue  func() int
-	strict func() map[string]float64
-	errors *ErrorLog
+	repo    ClipRepository
+	clock   Clock
+	ttl     time.Duration
+	lives   func() []domain.LiveStream
+	offGame func() []domain.LiveStream
+	queue   func() int
+	strict  func() map[string]float64
+	errors  *ErrorLog
 }
 
 // NewStatus builds the use case; lives and queue may be nil.
@@ -51,6 +55,10 @@ func NewStatus(repo ClipRepository, clock Clock, ttl time.Duration, lives func()
 // SetQueue sets the queue depth source (wired after the producer exists).
 func (s *Status) SetQueue(f func() int) { s.queue = f }
 
+// SetOffGame sets the source of the lives outside the games filter
+// (MonitorLives.OffGame).
+func (s *Status) SetOffGame(f func() []domain.LiveStream) { s.offGame = f }
+
 // SetStrictness sets the calibration source (DetectMoment.Strictness).
 func (s *Status) SetStrictness(f func() map[string]float64) { s.strict = f }
 
@@ -59,6 +67,9 @@ func (s *Status) Report(ctx context.Context) (StatusReport, error) {
 	r := StatusReport{ClipsToday: map[domain.ClipState]int{}}
 	if s.lives != nil {
 		r.Lives = s.lives()
+	}
+	if s.offGame != nil {
+		r.OffGame = s.offGame()
 	}
 	if s.queue != nil {
 		r.Queue = s.queue()

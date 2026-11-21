@@ -142,7 +142,7 @@ func runService(_ []string, stderr io.Writer) error {
 		{Name: "expire-previews", Interval: time.Minute, Immediate: true, Run: decisions.ExpireTask},
 		{Name: "gpu-metrics", Interval: 15 * time.Second, Immediate: true, Run: gpu.Sample},
 	}
-	var lives func() []domain.LiveStream
+	var lives, offGame func() []domain.LiveStream
 	var supervisor *twitchingest.Supervisor
 	if cfg.Secrets.HasTwitch() {
 		tw := twitchapi.New(cfg.Secrets.TwitchClientID, cfg.Secrets.TwitchClientSecret, twitchapi.WithLogger(log))
@@ -168,8 +168,9 @@ func runService(_ []string, stderr io.Writer) error {
 			ClipLookback:     cfg.Capture.BufferDuration.D(),
 			MaxStreams:       cfg.Concurrency.MaxStreams,
 		}, detectMoment, platform, log, supOpts...)
-		monitor := app.NewMonitorLives(platform, streamers, supervisor, log)
+		monitor := app.NewMonitorLives(platform, streamers, domain.GameFilter(cfg.Twitch.Games), supervisor, log)
 		lives = monitor.Live
+		offGame = monitor.OffGame
 		tasks = append(tasks,
 			scheduler.Task{Name: "streams-gauge", Interval: 15 * time.Second, Run: func(context.Context) error {
 				prom.SetStreamsLive(supervisor.Running())
@@ -184,13 +185,15 @@ func runService(_ []string, stderr io.Writer) error {
 				return errors.Join(errs...)
 			}},
 		)
-		log.Info("live monitoring enabled", slog.Int("streamers", len(monitor.Logins())), slog.Bool("chat", userTokens != nil))
+		log.Info("live monitoring enabled", slog.Int("streamers", len(monitor.Logins())),
+			slog.Any("games", cfg.Twitch.Games), slog.Bool("chat", userTokens != nil))
 	} else {
 		log.Warn("TWITCH_CLIENT_ID/TWITCH_CLIENT_SECRET missing: live monitoring disabled (degraded mode)")
 	}
 
 	status := app.NewStatus(repo, clk, ttl, lives, queue.Depth, errLog)
 	status.SetStrictness(detectMoment.Strictness)
+	status.SetOffGame(offGame)
 
 	srv := httpserver.New(cfg.HTTP.Addr,
 		httpserver.WithLogger(log),

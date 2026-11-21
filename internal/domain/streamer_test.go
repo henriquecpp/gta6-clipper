@@ -74,3 +74,31 @@ func TestLayoutValid(t *testing.T) {
 		t.Error("x valid")
 	}
 }
+
+func TestGameFilterAllows(t *testing.T) {
+	gta := LiveStream{GameID: "1867279146", Game: "Grand Theft Auto VI"}
+	chatting := LiveStream{GameID: "509658", Game: "Just Chatting"}
+	none := LiveStream{}
+	cases := []struct {
+		name   string
+		filter GameFilter
+		live   LiveStream
+		want   bool
+	}{
+		{"empty filter allows any category", nil, chatting, true},
+		{"empty filter allows a live without category", GameFilter{}, none, true},
+		{"by name", GameFilter{"Grand Theft Auto VI"}, gta, true},
+		{"by name ignoring case and spaces", GameFilter{"  grand theft auto vi "}, gta, true},
+		{"by id", GameFilter{"1867279146"}, gta, true},
+		{"other category", GameFilter{"Grand Theft Auto VI"}, chatting, false},
+		{"any of several", GameFilter{"Just Chatting", "1867279146"}, chatting, true},
+		{"no category never matches a filter", GameFilter{"Grand Theft Auto VI"}, none, false},
+		{"blank entries match nothing", GameFilter{"", "  "}, none, false},
+		{"id is not matched by prefix", GameFilter{"186727914"}, gta, false},
+	}
+	for _, c := range cases {
+		if got := c.filter.Allows(c.live); got != c.want {
+			t.Errorf("%s: Allows = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

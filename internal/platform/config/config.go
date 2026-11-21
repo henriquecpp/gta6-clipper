@@ -66,6 +66,9 @@ type Twitch struct {
 	LivePollInterval Duration `yaml:"live_poll_interval"`
 	CaptureQuality   string   `yaml:"capture_quality"`
 	TokenFile        string   `yaml:"token_file"`
+	// Games lists the categories whose lives are monitored, by Twitch name or
+	// id; an empty list monitors every category.
+	Games []string `yaml:"games"`
 }
 
 // Capture settings.

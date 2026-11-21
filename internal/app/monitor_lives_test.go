@@ -1,9 +1,11 @@
 package app_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/henriquecpp/gta6-clipper/internal/app"
@@ -23,7 +25,7 @@ func TestMonitorLivesEntriesAndExits(t *testing.T) {
 		{Login: "carol", AllowsClips: false, Layout: domain.LayoutBlur},
 		{Login: "alice", AllowsClips: true, Layout: domain.LayoutBlur}, // duplicate
 	}
-	m := app.NewMonitorLives(p, streamers, obs, discardLog())
+	m := app.NewMonitorLives(p, streamers, nil, obs, discardLog())
 	if got := m.Logins(); len(got) != 2 || got[0] != "alice" || got[1] != "bob" {
 		t.Fatalf("logins = %v (carol must be ignored, alice deduplicated)", got)
 	}
@@ -81,11 +83,11 @@ func TestMonitorLivesEntriesAndExits(t *testing.T) {
 
 func TestMonitorLivesNoStreamersAndNilObserver(t *testing.T) {
 	p := &fakes.Platform{}
-	m := app.NewMonitorLives(p, nil, nil, discardLog())
+	m := app.NewMonitorLives(p, nil, nil, nil, discardLog())
 	if err := m.Poll(context.Background()); err != nil || p.Calls != 0 {
 		t.Fatalf("poll with no streamers: err=%v calls=%d", err, p.Calls)
 	}
-	m = app.NewMonitorLives(p, []domain.Streamer{{Login: "a", AllowsClips: true}}, nil, discardLog())
+	m = app.NewMonitorLives(p, []domain.Streamer{{Login: "a", AllowsClips: true}}, nil, nil, discardLog())
 	p.SetStreams(domain.LiveStream{ID: "1", Login: "a"})
 	if err := m.Poll(context.Background()); err != nil {
 		t.Fatal(err)
@@ -96,5 +98,81 @@ func TestMonitorLivesNoStreamersAndNilObserver(t *testing.T) {
 	}
 	if len(m.Live()) != 0 {
 		t.Fatal("expected no lives")
+	}
+}
+
+func TestMonitorLivesGameFilter(t *testing.T) {
+	ctx := context.Background()
+	p := &fakes.Platform{}
+	obs := &fakes.LiveObserver{}
+	var logs bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&logs, nil))
+	streamers := []domain.Streamer{
+		{Login: "alice", AllowsClips: true, Layout: domain.LayoutBlur},
+		{Login: "bob", AllowsClips: true, Layout: domain.LayoutBlur},
+	}
+	m := app.NewMonitorLives(p, streamers, domain.GameFilter{"Grand Theft Auto VI"}, obs, log)
+	gta := func(id domain.StreamID, login string) domain.LiveStream {
+		return domain.LiveStream{ID: id, Login: login, GameID: "1867279146", Game: "Grand Theft Auto VI"}
+	}
+	other := func(id domain.StreamID, login, game string) domain.LiveStream {
+		return domain.LiveStream{ID: id, Login: login, GameID: "1", Game: game}
+	}
+	poll := func(streams ...domain.LiveStream) {
+		t.Helper()
+		p.SetStreams(streams...)
+		if err := m.Poll(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	logins := func(ls []domain.LiveStream) string {
+		var s []string
+		for _, l := range ls {
+			s = append(s, l.Login+":"+string(l.ID))
+		}
+		return strings.Join(s, ",")
+	}
+
+	// Alice plays GTA VI, bob is live in another game: only alice is monitored.
+	poll(gta("s1", "alice"), other("s2", "bob", "Just Chatting"))
+	started, ended := obs.Snapshot()
+	if logins(started) != "alice:s1" || len(ended) != 0 {
+		t.Fatalf("poll 1: started=%v ended=%v", started, ended)
+	}
+	if logins(m.Live()) != "alice:s1" || logins(m.OffGame()) != "bob:s2" {
+		t.Fatalf("poll 1: live=%v offGame=%v", m.Live(), m.OffGame())
+	}
+
+	// Nothing changes: no notifications and the skipped live is not logged again.
+	poll(gta("s1", "alice"), other("s2", "bob", "Just Chatting"))
+	if n := strings.Count(logs.String(), "game outside the list"); n != 1 {
+		t.Fatalf("off-game live logged %d times, want once:\n%s", n, logs.String())
+	}
+
+	// Bob starts playing GTA VI in the same broadcast; alice leaves for another game.
+	poll(other("s1", "alice", "Minecraft"), gta("s2", "bob"))
+	started, ended = obs.Snapshot()
+	if logins(started) != "alice:s1,bob:s2" || logins(ended) != "alice:s1" {
+		t.Fatalf("poll 3: started=%v ended=%v", started, ended)
+	}
+	if logins(m.Live()) != "bob:s2" || logins(m.OffGame()) != "alice:s1" {
+		t.Fatalf("poll 3: live=%v offGame=%v", m.Live(), m.OffGame())
+	}
+	if !strings.Contains(logs.String(), "live left the monitored games") || strings.Count(logs.String(), "game outside the list") != 1 {
+		t.Fatalf("leaving the list must be logged once as such:\n%s", logs.String())
+	}
+
+	// Alice comes back to GTA VI: the same broadcast is monitored again.
+	poll(gta("s1", "alice"), gta("s2", "bob"))
+	started, _ = obs.Snapshot()
+	if logins(started) != "alice:s1,bob:s2,alice:s1" || len(m.OffGame()) != 0 {
+		t.Fatalf("poll 4: started=%v offGame=%v", started, m.OffGame())
+	}
+
+	// Both go offline.
+	poll()
+	_, ended = obs.Snapshot()
+	if logins(ended) != "alice:s1,alice:s1,bob:s2" || len(m.Live()) != 0 || len(m.OffGame()) != 0 {
+		t.Fatalf("poll 5: ended=%v live=%v offGame=%v", ended, m.Live(), m.OffGame())
 	}
 }

@@ -46,6 +46,9 @@ func newEnv(t *testing.T) *env {
 		return []domain.LiveStream{{Login: "alice", Game: "GTA VI", Viewers: 1200}}
 	}, nil, errs)
 	st.SetStrictness(func() map[string]float64 { return map[string]float64{"kaicenat": 0.75, "xqc": 0.25} })
+	st.SetOffGame(func() []domain.LiveStream {
+		return []domain.LiveStream{{Login: "bob", Game: "Just Chatting"}, {Login: "carol"}}
+	})
 	e.bot = New(tb, []int64{allowedChat}, dec, st, log, WithRetry(func(_ context.Context, id domain.ClipID) error {
 		e.retried = append(e.retried, id)
 		return nil
@@ -152,7 +155,8 @@ func TestCommands(t *testing.T) {
 	}
 	status := msgs[0].Params["text"]
 	for _, want := range []string{"Lives monitoradas: 1", "alice — GTA VI (1200 viewers)", "Aguardando aprovação: 1", "Custo hoje: $0.000000", "há 5min", "whisper &lt;down&gt;",
-		"Exigência extra (aprendida dos seus descartes): kaicenat +0.75 · xqc +0.25"} {
+		"Exigência extra (aprendida dos seus descartes): kaicenat +0.75 · xqc +0.25",
+		"Ao vivo em outro jogo (não monitoradas): bob (Just Chatting) · carol (sem categoria)"} {
 		if !strings.Contains(status, want) {
 			t.Errorf("status lacks %q:\n%s", want, status)
 		}

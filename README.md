@@ -2,7 +2,8 @@
 
 Clipador automático de lives da **Twitch** com **aprovação humana via Telegram**.
 
-1. Monitora as lives de uma allowlist de streamers.
+1. Monitora as lives de uma allowlist de streamers, só enquanto estão na categoria **Grand Theft Auto VI**
+   (configurável em `twitch.games`).
 2. Detecta "melhores momentos" por **voz** (energia da fala, com VAD) e **chat** (taxa de mensagens e
    emotes), em tempo real, e confirma com a **chuva de clipes** dos espectadores (sinal tardio).
 3. Guarda a janela de vídeo do momento, gera uma **prévia** 480p e envia ao seu Telegram com os botões
@@ -39,8 +40,8 @@ Instruções do projeto: [CLAUDE.md](CLAUDE.md)
 ## Como funciona
 
 ```
-Twitch ──► MonitorLives (polling Get Streams a cada 45 s)
-              │ live começou
+Twitch ──► MonitorLives (polling Get Streams a cada 45 s, filtro de jogo)
+              │ live começou na categoria monitorada
               ▼
          Supervisor por live ──► Streamlink → ffmpeg ──► segmentos de 2 s (buffer circular, tmpfs)
               │                                   └────► PCM 16 kHz → VAD → energia da voz
@@ -157,8 +158,17 @@ streamers:
     layout: blur               # blur | stack | crop
     # stack: { facecam: [0.70, 0.00, 0.30, 0.30], gameplay: [0, 0, 1, 1] }  # [x, y, w, h] de 0 a 1
     offsets: { capture_latency: 4s, chat: 8s, clip: 5s }
+
+twitch:
+  games: ["Grand Theft Auto VI"]   # categorias monitoradas (nome ou id da Twitch); [] = qualquer jogo
 ```
 
+- **Filtro de jogo (`twitch.games`):** um streamer da allowlist só é monitorado enquanto a live está numa das
+  categorias da lista. A categoria vem do Get Streams a cada `live_poll_interval` (45 s): se o streamer troca
+  para outra categoria (ex.: Just Chatting), a captura para e o buffer daquela live é descartado; quando ele
+  volta para GTA VI, a captura recomeça (com novo aquecimento de 5 min). Clipes já retidos não são afetados.
+  Vale o nome exato da categoria (sem diferenciar maiúsculas) ou o id (`1867279146` = Grand Theft Auto VI).
+  O padrão, se a chave não existir, é só GTA VI; `games: []` monitora qualquer jogo.
 - **Layouts:** `blur` — vídeo 16:9 no meio sobre ele mesmo ampliado e desfocado; `stack` — câmera em cima
   (35%) e jogo embaixo, com as regiões em coordenadas normalizadas do quadro original; `crop` — recorte central.
 - **`approval.ttl`** (6 h): prévias não decididas expiram e a mídia é apagada.
@@ -250,7 +260,7 @@ Ele captura por 60 s, mostra frames de áudio/fala, retém 20 s e estima a latê
   "⌛ Expirado", "⚠️ Falhou: …" (com botão **🔁 Tentar de novo**).
 - O vídeo final chega com a manchete na legenda; o **texto do post** vem na mensagem seguinte, pronto para
   copiar. O arquivo também fica em `.\output\<data>_<streamer>_<id>.mp4`.
-- Comandos: `/status` (lives, fila, último erro, custo do dia), `/pending` (prévias aguardando),
+- Comandos: `/status` (lives monitoradas e as que estão ao vivo em outro jogo, fila, último erro, custo do dia), `/pending` (prévias aguardando),
   `/retry <clip_id>` (reprocessa um clipe que falhou; o plano do Claude já pago é reaproveitado).
 - Mensagens e botões de chats fora da allowlist são ignorados.
 
@@ -322,7 +332,7 @@ Endpoints internos (só em `localhost`): `/healthz`, `/readyz`, `/metrics`.
 | `h264_nvenc` ausente / `Cannot load libnvidia-encode.so.1` | O container precisa da capability `video` (já no `docker-compose.yml`); atualize o driver. O app cai sozinho para `libx264` (`clipper_nvenc_available 0`). |
 | `docker run --gpus all ... nvidia-smi` falha | Docker Desktop sem backend WSL2 ou driver antigo; `wsl --update` e reinicie o Docker Desktop. |
 | whisper responde 503 | Ainda carregando o modelo (~10 s); o app repete. Se persistir: `task whisper:model` (modelo ausente). |
-| Lives não aparecem | `TWITCH_CLIENT_ID/SECRET` ausentes (log de modo degradado) ou login errado na allowlist; `allows_clips: false` ignora o canal. |
+| Lives não aparecem | `TWITCH_CLIENT_ID/SECRET` ausentes (log de modo degradado) ou login errado na allowlist; `allows_clips: false` ignora o canal. Live em outra categoria fica fora (`live not monitored: game outside the list` no log e no `/status`): confira `twitch.games`. |
 | "twitch user token unavailable/invalid" | Rode `task auth:twitch`. Sem ele só o chat fica desligado. |
 | "group chat was upgraded to a supergroup chat" / "outside the allowlist ignored" | O Telegram converteu o grupo em supergrupo (ex.: ao mudar a visibilidade do histórico) e o id mudou para `-100…`. O log mostra o novo id (`migrate to chat ID`); troque em `TELEGRAM_ALLOWED_CHAT_IDS` e rode `task up`. |
 | Prévias não chegam | Token/chat id do Telegram; mande `/status` ao bot. Webhook ativo impede o long polling (`deleteWebhook`). |

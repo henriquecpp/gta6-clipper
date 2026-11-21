@@ -25,6 +25,7 @@ type streamJSON struct {
 	UserID      string    `json:"user_id"`
 	UserLogin   string    `json:"user_login"`
 	UserName    string    `json:"user_name"`
+	GameID      string    `json:"game_id"`
 	GameName    string    `json:"game_name"`
 	Type        string    `json:"type"`
 	Title       string    `json:"title"`
@@ -62,6 +63,7 @@ func (c *Client) LiveStreams(ctx context.Context, logins []string) ([]domain.Liv
 				Login:         strings.ToLower(s.UserLogin),
 				DisplayName:   s.UserName,
 				Title:         s.Title,
+				GameID:        s.GameID,
 				Game:          s.GameName,
 				Language:      s.Language,
 				Viewers:       s.ViewerCount,

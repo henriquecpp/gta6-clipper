@@ -116,7 +116,7 @@ func (f *fakeTwitch) handler() http.Handler {
 			if strings.HasPrefix(l, "live") {
 				data = append(data, map[string]any{
 					"id": "s-" + l, "user_id": "u-" + l, "user_login": l, "user_name": strings.ToUpper(l),
-					"game_name": "Grand Theft Auto VI", "type": "live", "title": "t", "viewer_count": 123,
+					"game_id": "1867279146", "game_name": "Grand Theft Auto VI", "type": "live", "title": "t", "viewer_count": 123,
 					"started_at": "2026-11-21T10:00:00Z", "language": "en",
 				})
 			}
@@ -212,7 +212,7 @@ func TestLiveStreamsBatchesAndMaps(t *testing.T) {
 	}
 	s := got[0]
 	if s.ID != "s-liveone" || s.BroadcasterID != "u-liveone" || s.Login != "liveone" || s.Viewers != 123 ||
-		s.Game != "Grand Theft Auto VI" || !s.StartedAt.Equal(time.Date(2026, 11, 21, 10, 0, 0, 0, time.UTC)) {
+		s.GameID != "1867279146" || s.Game != "Grand Theft Auto VI" || !s.StartedAt.Equal(time.Date(2026, 11, 21, 10, 0, 0, 0, time.UTC)) {
 		t.Fatalf("mapping = %+v", s)
 	}
 	if f.appTokens != 1 {

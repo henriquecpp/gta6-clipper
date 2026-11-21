@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -95,6 +96,7 @@ func TestValidationErrors(t *testing.T) {
 		"file too big":     "render: {max_file_bytes: 60MiB}",
 		"buffer too short": "capture: {buffer_duration: 30s}",
 		"poll too fast":    "twitch: {live_poll_interval: 5s}",
+		"blank game":       "twitch: {games: [' ']}",
 		"duplicate login":  "streamers: [{login: a, language: en, allows_clips: true}, {login: A, language: en}]",
 		"missing language": "streamers: [{login: a, allows_clips: true}]",
 		"bad layout":       "streamers: [{login: a, language: en, layout: diagonal}]",
@@ -141,5 +143,22 @@ func TestByteSize(t *testing.T) {
 func TestLoadMissingFile(t *testing.T) {
 	if _, err := Load(filepath.Join(t.TempDir(), "nope.yaml"), os.Getenv); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestTwitchGames(t *testing.T) {
+	cases := map[string][]string{
+		"": {"Grand Theft Auto VI"}, // default: only GTA VI
+		"twitch: {games: [1867279146, Just Chatting]}": {"1867279146", "Just Chatting"},
+		"twitch: {games: []}":                          {}, // explicit empty list: every game
+	}
+	for yml, want := range cases {
+		cfg, err := Parse([]byte(yml), env(nil))
+		if err != nil {
+			t.Fatalf("%q: %v", yml, err)
+		}
+		if !slices.Equal(cfg.Twitch.Games, want) {
+			t.Errorf("%q: games = %q, want %q", yml, cfg.Twitch.Games, want)
+		}
 	}
 }

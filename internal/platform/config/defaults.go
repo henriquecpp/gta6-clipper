@@ -11,6 +11,7 @@ func Defaults() *Config {
 			LivePollInterval: dur(45 * time.Second),
 			CaptureQuality:   "720p60",
 			TokenFile:        "/data/twitch_user_token.json",
+			Games:            []string{"Grand Theft Auto VI"},
 		},
 		Capture: Capture{
 			BufferDir:       "/buffer",

@@ -208,7 +208,7 @@ func TestPipelineEndToEnd(t *testing.T) {
 	}}}
 	sup := twitchingest.NewSupervisor(twitchingest.SupervisorConfig{Tick: 500 * time.Millisecond, ClipPollInterval: 2 * time.Second,
 		ClipLookback: 10 * time.Minute, MaxStreams: 2}, detectMoment, platform, log, twitchingest.WithCapturer(capt))
-	monitor := app.NewMonitorLives(platform, []domain.Streamer{streamer}, sup, log)
+	monitor := app.NewMonitorLives(platform, []domain.Streamer{streamer}, nil, sup, log)
 
 	runCtx, stop := context.WithCancel(ctx)
 	g, gctx := errgroup.WithContext(runCtx)

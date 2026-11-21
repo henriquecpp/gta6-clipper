@@ -179,6 +179,17 @@ func (b *Bot) statusText(ctx context.Context) string {
 	for _, l := range r.Lives {
 		fmt.Fprintf(&s, "\n• %s — %s (%d viewers)", html.EscapeString(l.Login), html.EscapeString(l.Game), l.Viewers)
 	}
+	if len(r.OffGame) > 0 {
+		parts := make([]string, 0, len(r.OffGame))
+		for _, l := range r.OffGame {
+			game := l.Game
+			if game == "" {
+				game = "sem categoria"
+			}
+			parts = append(parts, fmt.Sprintf("%s (%s)", html.EscapeString(l.Login), html.EscapeString(game)))
+		}
+		s.WriteString("\nAo vivo em outro jogo (não monitoradas): " + strings.Join(parts, " · "))
+	}
 	fmt.Fprintf(&s, "\nAguardando aprovação: %d\nFila de produção: %d\nCusto hoje: %s", r.Pending, r.Queue, r.CostToday)
 	if len(r.ClipsToday) > 0 {
 		states := make([]string, 0, len(r.ClipsToday))

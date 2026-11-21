@@ -48,6 +48,11 @@ func (c *Config) Validate() error {
 	if c.Twitch.TokenFile == "" {
 		add("twitch.token_file is required")
 	}
+	for i, g := range c.Twitch.Games {
+		if strings.TrimSpace(g) == "" {
+			add("twitch.games[%d] is blank (use a category name or id; an empty list monitors every game)", i)
+		}
+	}
 
 	if c.Capture.BufferDir == "" || c.Capture.PendingDir == "" {
 		add("capture.buffer_dir and capture.pending_dir are required")

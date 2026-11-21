@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -91,10 +92,34 @@ type LiveStream struct {
 	Login         string
 	DisplayName   string
 	Title         string
-	Game          string
+	GameID        string // Twitch category id
+	Game          string // Twitch category name
 	Language      string
 	Viewers       int
 	StartedAt     time.Time
+}
+
+// GameFilter lists the categories whose lives are monitored. An entry matches
+// the category id exactly or its name ignoring case, so both "1867279146" and
+// "Grand Theft Auto VI" select GTA VI. An empty filter allows every category.
+type GameFilter []string
+
+// Allows reports whether the live is streaming one of the listed categories.
+// A live without a category only passes an empty filter.
+func (f GameFilter) Allows(l LiveStream) bool {
+	if len(f) == 0 {
+		return true
+	}
+	for _, g := range f {
+		g = strings.TrimSpace(g)
+		if g == "" {
+			continue
+		}
+		if g == l.GameID || strings.EqualFold(g, strings.TrimSpace(l.Game)) {
+			return true
+		}
+	}
+	return false
 }
 
 // ViewerClip is a clip created by a viewer during a broadcast.
