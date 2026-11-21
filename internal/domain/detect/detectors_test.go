@@ -1,6 +1,7 @@
 package detect
 
 import (
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -188,5 +189,54 @@ func TestClipsCountAndClusters(t *testing.T) {
 	b.Observe("y", at(20*time.Second))
 	if b.Value(at(10*time.Second)) != 2 {
 		t.Fatal("boundary clips not counted")
+	}
+}
+
+func TestClipsRequiredGrowsWithTheChannelClipRate(t *testing.T) {
+	cfg := ClipsConfig{GroupWindow: 15 * time.Second, MinClips: 3, MinZ: 3.5, Retention: 15 * time.Minute}
+	// rate builds a detector that saw perMin clips per minute, evenly, over the 10 minutes before now.
+	rate := func(perMin int) *Clips {
+		c := NewClips(cfg)
+		n := 10 * perMin
+		for i := range n {
+			c.Observe(fmt.Sprintf("c%d", i), at(time.Duration(i)*10*time.Minute/time.Duration(n)))
+		}
+		return c
+	}
+	now := at(10 * time.Minute)
+	tests := []struct {
+		name   string
+		perMin int
+		want   int
+	}{
+		{"no clips yet: the floor", 0, 3},
+		{"1 clip/min: still the floor", 1, 3},    // λ = 0.5 → ⌈0.5 + 3.5·0.71⌉ = 3
+		{"caseoh-like (2/min)", 2, 5},            // λ = 1 → ⌈1 + 3.5⌉ = 5
+		{"kaicenat-like (4/min)", 4, 7},          // λ = 2 → ⌈2 + 3.5·1.41⌉ = 7
+		{"a very busy channel (10/min)", 10, 13}, // λ = 5 → ⌈5 + 3.5·2.24⌉ = 13
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := rate(tt.perMin).Required(now); got != tt.want {
+				t.Fatalf("Required = %d, want %d (rate %.3f/s)", got, tt.want, rate(tt.perMin).Rate(now))
+			}
+		})
+	}
+	// Right after the capture starts, a handful of clips is averaged over at
+	// least 5 minutes instead of looking like a huge rate.
+	early := NewClips(cfg)
+	for i := range 4 {
+		early.Observe(fmt.Sprintf("e%d", i), at(time.Duration(i)*10*time.Second))
+	}
+	if got := early.Required(at(40 * time.Second)); got != 3 {
+		t.Fatalf("early Required = %d, want the floor 3", got)
+	}
+	// MinZ 0 keeps the fixed MinClips behaviour.
+	plain := NewClips(ClipsConfig{GroupWindow: 15 * time.Second, MinClips: 3})
+	for i := range 40 {
+		plain.Observe(fmt.Sprintf("p%d", i), at(time.Duration(i)*15*time.Second))
+	}
+	if got := plain.Required(at(10 * time.Minute)); got != 3 {
+		t.Fatalf("Required without MinZ = %d, want 3", got)
 	}
 }

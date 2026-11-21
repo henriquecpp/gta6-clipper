@@ -256,10 +256,9 @@ func (s *Supervisor) runStream(ctx context.Context, st domain.Streamer, live dom
 }
 
 func (s *Supervisor) pollClips(ctx context.Context, st domain.Streamer, live domain.LiveStream, captureStart time.Time) {
+	// Clips from before the capture started never become moments, but they
+	// give the channel's clip rate (the clip-rain baseline) from the first poll.
 	since := s.now().Add(-s.cfg.ClipLookback)
-	if since.Before(captureStart.Add(-time.Minute)) {
-		since = captureStart.Add(-time.Minute)
-	}
 	clips, err := s.platform.RecentClips(ctx, live.BroadcasterID, since)
 	if err != nil {
 		if ctx.Err() == nil {

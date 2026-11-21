@@ -429,6 +429,11 @@ func (d *DetectMoment) ObserveClips(ctx context.Context, id domain.StreamID, cli
 			if !inBuffer || s.nearMoment(cl.Center, domain.StreamPos(d.cfg.Scorer.Cooldown)) {
 				continue
 			}
+			// A rain is relative to the channel: a cluster that big channels
+			// produce every minute is not a moment.
+			if cl.Count < s.clips.Required(capPos) {
+				continue
+			}
 			// Same gate as the fast path (§9): voice or chat must react. Viewers of
 			// big channels clip all the time; a cluster nobody reacted to is noise.
 			// The window is ±group_window because clip positions are estimates.

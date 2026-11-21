@@ -176,6 +176,8 @@ type ClipsDetection struct {
 	PollInterval Duration `yaml:"poll_interval"`
 	GroupWindow  Duration `yaml:"group_window"`
 	MinClips     int      `yaml:"min_clips"`
+	// MinZ: how far above the channel's usual clip rate a cluster must be.
+	MinZ float64 `yaml:"min_z"`
 }
 
 // Secrets read from the environment (.env).

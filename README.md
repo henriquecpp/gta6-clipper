@@ -279,8 +279,14 @@ Ele captura por 60 s, mostra frames de áudio/fala, retém 20 s e estima a latê
 ## Ajuste da detecção
 
 Parâmetros em `detection` ([ADR 0017](docs/decisions/0017-modelo-de-deteccao.md)):
+- **Muitas prévias sem conteúdo?** Suba `threshold_on` (3.5), `min_signal_z` (3.0) e `clips.min_z` (3.5),
+  de 0,5 em 0,5. **Poucas?** Desça os mesmos. Depois, `task up` (recria o app com a config nova).
 - `threshold_on`/`threshold_off` (histerese), `weights` (voz, chat, clipes), `cooldown`, `warmup` (5 min sem
-  disparos no início de cada live), `min_signal_z` (voz ou chat precisam passar desse z).
+  disparos no início de cada live), `min_signal_z` (voz ou chat precisam passar desse z; vale também para a
+  chuva de clipes, olhando ±`group_window` em volta dela).
+- `clips.min_z`: a chuva de clipes é medida contra a taxa normal do canal. Canais grandes clipam o tempo
+  todo (kaicenat, 45 mil espectadores: ~4 clipes/min, mediana de 3 clipes em qualquer janela de 30 s), então
+  o cluster precisa de `⌈λ + min_z·√λ⌉` clipes (λ = clipes esperados na janela; mínimo `min_clips`).
 - `pre_roll`/`post_roll`: janela retida em volta do pico (60 s antes, 30 s depois).
 - `chat.emotes` por idioma (peso da mensagem = maior peso dos termos que ela contém).
 - **Offsets por streamer** (`capture_latency`, `chat`, `clip`): os padrões (4 s, 8 s, 5 s) são estimativas.

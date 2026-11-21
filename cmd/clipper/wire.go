@@ -57,6 +57,7 @@ func detectionConfig(c *config.Config) app.DetectionConfig {
 		Clips: detect.ClipsConfig{
 			GroupWindow: d.Clips.GroupWindow.D(),
 			MinClips:    d.Clips.MinClips,
+			MinZ:        d.Clips.MinZ,
 		},
 		PreRoll:        d.PreRoll.D(),
 		PostRoll:       d.PostRoll.D(),

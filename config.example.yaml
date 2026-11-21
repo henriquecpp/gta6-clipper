@@ -70,9 +70,9 @@ detection:
   tick: 500ms
   warmup: 5m
   cooldown: 60s
-  threshold_on: 3.0
+  threshold_on: 3.5        # higher = fewer previews (voice and chat must react together)
   threshold_off: 1.5
-  min_signal_z: 2.0
+  min_signal_z: 3.0        # voice or chat must reach this z (also gates clip rains)
   z_max: 6.0
   pre_roll: 60s
   post_roll: 30s
@@ -93,3 +93,4 @@ detection:
     poll_interval: 30s
     group_window: 15s
     min_clips: 3
+    min_z: 3.5               # how far a clip rain must exceed the channel's usual clip rate

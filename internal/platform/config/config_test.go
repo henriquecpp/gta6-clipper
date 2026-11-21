@@ -41,7 +41,7 @@ func TestEmptyConfigUsesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Detection.ThresholdOn != 3.0 || cfg.Approval.TTL.D() != 6*time.Hour || cfg.Secrets.HasTwitch() {
+	if cfg.Detection.ThresholdOn != 3.5 || cfg.Detection.Clips.MinZ != 3.5 || cfg.Approval.TTL.D() != 6*time.Hour || cfg.Secrets.HasTwitch() {
 		t.Fatalf("defaults not applied: %+v", cfg)
 	}
 }
@@ -102,6 +102,7 @@ func TestValidationErrors(t *testing.T) {
 		"duration as int":  "approval: {ttl: 5}",
 		"concurrency":      "concurrency: {render_workers: 0}",
 		"min clips":        "detection: {clips: {min_clips: 0}}",
+		"clips min z":      "detection: {clips: {min_z: -1}}",
 		"voice frame":      "detection: {voice: {frame: 1s, window: 2s}}",
 		"pricing":          "editor: {pricing: {input: -1}}",
 		"max tokens":       "editor: {max_tokens: 10}",

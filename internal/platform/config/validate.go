@@ -202,5 +202,8 @@ func (d Detection) validate() []error {
 	if d.Clips.MinClips < 1 {
 		add("detection.clips.min_clips must be >= 1")
 	}
+	if d.Clips.MinZ < 0 {
+		add("detection.clips.min_z must be >= 0")
+	}
 	return errs
 }

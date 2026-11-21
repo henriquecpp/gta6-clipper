@@ -310,6 +310,38 @@ func TestDetectMomentLateClipsRespectCooldown(t *testing.T) {
 	}
 }
 
+func TestDetectMomentLateClipsScaleWithTheChannelClipRate(t *testing.T) {
+	cfg := detectionConfig()
+	cfg.Clips.MinZ = 3.5
+	h := newHarness(t, true)
+	h.d = app.NewDetectMoment(cfg, h.repo, func() (domain.ClipID, error) { return "c", nil }, h.clock, discardLog(), app.WithCapture(h.capture))
+	h.d.StartStream(testStreamer, testLive, captureStart)
+	h.run(0, 300*time.Second, shoutAt(250*time.Second), h.steadyChat)
+	// A big channel: 4 clips per minute spread over the 10 minutes before now
+	// (most before the capture started), then 4 clips around the shout.
+	var busy []domain.ViewerClip
+	for i := range 40 {
+		center := -300*time.Second + time.Duration(i)*15*time.Second + 7*time.Second
+		busy = append(busy, lateClips(center, 1, fmt.Sprintf("bg%d", i))...)
+	}
+	busy = append(busy, lateClips(250*time.Second, 4, "moment")...)
+	if err := h.d.ObserveClips(context.Background(), testLive.ID, busy); err != nil {
+		t.Fatal(err)
+	}
+	h.run(300*time.Second, 320*time.Second, steadyVoice, h.steadyChat)
+	if h.repo.Len() != 0 {
+		t.Fatalf("clips = %d; 4 clips is the usual clipping of this channel, not a rain", h.repo.Len())
+	}
+	// More viewers clip it: now it stands out.
+	if err := h.d.ObserveClips(context.Background(), testLive.ID, lateClips(251*time.Second, 6, "more")); err != nil {
+		t.Fatal(err)
+	}
+	h.run(320*time.Second, 325*time.Second, steadyVoice, h.steadyChat)
+	if h.repo.Len() != 1 {
+		t.Fatalf("clips = %d, want 1 once the cluster stands out from the channel rate", h.repo.Len())
+	}
+}
+
 func TestDetectMomentClipsBoostAcceptedClip(t *testing.T) {
 	h := newHarness(t, true)
 	h.run(0, 200*time.Second, shoutAt(150*time.Second), h.steadyChat)
