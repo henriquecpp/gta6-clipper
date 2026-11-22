@@ -109,13 +109,15 @@ func produceConfig(c *config.Config) app.ProduceConfig {
 			Input: domain.USDToMicro(p.Input), Output: domain.USDToMicro(p.Output),
 			CacheWrite: domain.USDToMicro(p.CacheWrite), CacheRead: domain.USDToMicro(p.CacheRead),
 		},
-		MaxCost:      domain.USDToMicro(c.Editor.MaxCostPerClipUSD),
-		Width:        c.Render.Width,
-		Height:       c.Render.Height,
-		FPS:          c.Render.FPS,
-		MaxBytes:     int64(c.Render.MaxFileBytes),
-		Streamers:    streamers,
-		GameLanguage: c.Whisper.GameLanguage,
+		MaxCost:       domain.USDToMicro(c.Editor.MaxCostPerClipUSD),
+		Width:         c.Render.Width,
+		Height:        c.Render.Height,
+		FPS:           c.Render.FPS,
+		MaxBytes:      int64(c.Render.MaxFileBytes),
+		Streamers:     streamers,
+		GameLanguage:  c.Whisper.GameLanguage,
+		FrameInterval: c.Editor.FrameInterval.D(),
+		MaxFrames:     c.Editor.MaxFrames,
 	}
 }
 

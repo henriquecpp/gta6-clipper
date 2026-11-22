@@ -53,6 +53,8 @@ func Defaults() *Config {
 			MaxCostPerClipUSD: 0.05,
 			ToolChoice:        "tool",
 			PeakTolerance:     dur(5 * time.Second),
+			FrameInterval:     dur(3 * time.Second),
+			MaxFrames:         40,
 		},
 		YouTube: YouTube{
 			TokenFile:         "/data/youtube_token.json",

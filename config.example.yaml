@@ -69,6 +69,8 @@ editor:
   max_cost_per_clip_usd: 0.05
   tool_choice: tool         # tool (forced) | auto (strict tool, for models that reject forced tool_choice)
   peak_tolerance: 5s
+  frame_interval: 3s        # still frames of the window shown to the editor (0 disables); ~300 tokens each
+  max_frames: 40            # cap; the spacing grows on long windows
   pricing:                  # USD per million tokens (fill with current prices for ANTHROPIC_MODEL)
     input: 0
     output: 0

@@ -33,6 +33,10 @@ type ProduceConfig struct {
 	// transcribed in it so the editor can tell game dialogue from the
 	// streamer. Empty disables the second pass.
 	GameLanguage string
+	// FrameInterval spaces the still frames the editor sees (0 disables
+	// them); MaxFrames caps how many (the interval grows on long windows).
+	FrameInterval time.Duration
+	MaxFrames     int
 }
 
 // ProduceFinalClip turns an approved clip into the delivered vertical video:
@@ -44,6 +48,7 @@ type ProduceFinalClip struct {
 	transcriber Transcriber
 	editor      Editor
 	renderer    Renderer
+	frames      FrameSampler
 	notifier    Notifier
 	media       MediaCapture
 	clock       Clock
@@ -52,9 +57,18 @@ type ProduceFinalClip struct {
 	errors      *ErrorLog
 }
 
+// ProduceOption configures a ProduceFinalClip.
+type ProduceOption func(*ProduceFinalClip)
+
+// WithFrameSampler lets the editor see still frames of the window; without
+// it the editor decides from the transcript and the signals only.
+func WithFrameSampler(s FrameSampler) ProduceOption {
+	return func(u *ProduceFinalClip) { u.frames = s }
+}
+
 // NewProduceFinalClip builds the use case; metrics and errs may be nil.
 func NewProduceFinalClip(cfg ProduceConfig, repo ClipRepository, t Transcriber, e Editor, r Renderer, n Notifier, media MediaCapture,
-	clock Clock, log *slog.Logger, metrics Metrics, errs *ErrorLog) *ProduceFinalClip {
+	clock Clock, log *slog.Logger, metrics Metrics, errs *ErrorLog, opts ...ProduceOption) *ProduceFinalClip {
 	if metrics == nil {
 		metrics = NopMetrics{}
 	}
@@ -64,8 +78,12 @@ func NewProduceFinalClip(cfg ProduceConfig, repo ClipRepository, t Transcriber, 
 	if cfg.OutputLanguage == "" {
 		cfg.OutputLanguage = "pt-BR"
 	}
-	return &ProduceFinalClip{cfg: cfg, repo: repo, transcriber: t, editor: e, renderer: r, notifier: n, media: media,
+	u := &ProduceFinalClip{cfg: cfg, repo: repo, transcriber: t, editor: e, renderer: r, notifier: n, media: media,
 		clock: clock, log: log, metrics: metrics, errors: errs}
+	for _, o := range opts {
+		o(u)
+	}
+	return u
 }
 
 // Execute runs (or resumes) the production of one clip. Clips that are not
@@ -144,7 +162,8 @@ func (u *ProduceFinalClip) edit(ctx context.Context, c *domain.Clip, log *slog.L
 	plan := c.Plan
 	if plan == nil {
 		game := u.gameTranscript(ctx, c, lang, log)
-		p, usage, err := u.plan(ctx, c, transcript, game, cons)
+		frames := u.sampleFrames(ctx, c, log)
+		p, usage, err := u.plan(ctx, c, transcript, game, frames, cons)
 		cost := usage.Cost(u.cfg.Pricing)
 		u.metrics.EditorUsage(cost, usage)
 		if err != nil {
@@ -230,13 +249,44 @@ func (u *ProduceFinalClip) gameTranscript(ctx context.Context, c *domain.Clip, l
 	return t
 }
 
+// sampleFrames takes the still frames the editor sees, spread over the whole
+// window. They only help the editor understand visual events, so a failure is
+// logged and the edit goes on without them.
+func (u *ProduceFinalClip) sampleFrames(ctx context.Context, c *domain.Clip, log *slog.Logger) []domain.Frame {
+	if u.frames == nil || u.cfg.FrameInterval <= 0 || u.cfg.MaxFrames <= 0 {
+		return nil
+	}
+	interval := frameInterval(c.Window.Duration(), u.cfg.FrameInterval, u.cfg.MaxFrames)
+	t0 := u.clock.Now()
+	frames, err := u.frames.Frames(ctx, c.SourceMedia, interval, u.cfg.MaxFrames)
+	u.metrics.StageDuration("frames", u.clock.Now().Sub(t0))
+	if err != nil {
+		log.Warn("frame sampling failed; editing without frames", slog.String("err", err.Error()))
+		return nil
+	}
+	return frames
+}
+
+// frameInterval is the spacing of the editor's frames: every, or wider when
+// a window that long would need more than limit frames (rounded up to the
+// next 100 ms).
+func frameInterval(window, every time.Duration, limit int) time.Duration {
+	if limit <= 0 || window <= every*time.Duration(limit) {
+		return every
+	}
+	const step = 100 * time.Millisecond
+	need := (window + time.Duration(limit) - 1) / time.Duration(limit)
+	return (need + step - 1) / step * step
+}
+
 // plan calls the editor and validates; an invalid answer gets exactly one
 // retry with the problem sent back to the model.
-func (u *ProduceFinalClip) plan(ctx context.Context, c *domain.Clip, t, game domain.Transcript, cons domain.EditConstraints) (domain.EditPlan, domain.Usage, error) {
+func (u *ProduceFinalClip) plan(ctx context.Context, c *domain.Clip, t, game domain.Transcript, frames []domain.Frame,
+	cons domain.EditConstraints) (domain.EditPlan, domain.Usage, error) {
 	req := domain.EditRequest{
 		ClipID: c.ID, Streamer: c.Streamer, Game: c.Game, StreamTitle: c.StreamTitle,
 		Language: t.Language, OutputLanguage: u.cfg.OutputLanguage, Transcript: t, GameTranscript: game,
-		Signals: relativeSignals(c), ViewerClipTitles: c.Moment.ClipTitles, Constraints: cons,
+		Signals: relativeSignals(c), ViewerClipTitles: c.Moment.ClipTitles, Frames: frames, Constraints: cons,
 	}
 	var total domain.Usage
 	for attempt := 0; attempt < 2; attempt++ {

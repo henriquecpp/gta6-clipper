@@ -9,8 +9,9 @@ Clipador automático de lives da **Twitch** com **aprovação humana via Telegra
 3. Guarda a janela de vídeo do momento, gera uma **prévia vertical** (480×854, mesmo layout do vídeo final) e
    envia ao seu Telegram com os botões
    **✅ Aprovar** e **🗑️ Descartar**.
-4. Só depois da aprovação: transcrição local na GPU (whisper.cpp) → **Claude** escolhe o corte, escreve a
-   manchete, a legenda em PT-BR (traduzida se preciso) e o texto do post → render vertical 9:16 com legenda
+4. Só depois da aprovação: transcrição local na GPU (whisper.cpp) → **Claude** lê a fala, os sinais e quadros
+   do vídeo (uma imagem a cada ~3 s), escolhe o corte, escreve a manchete, a legenda em PT-BR (traduzida se
+   preciso) e o texto do post → render vertical 9:16 com legenda
    queimada (ffmpeg + NVENC) → vídeo e texto entregues no Telegram.
 5. **Nunca publica nada sozinho.** Com o YouTube configurado, o vídeo final chega com o botão
    **📤 Publicar no YouTube**, e só esse toque publica o vídeo como Short no seu canal, com título, descrição e
@@ -204,7 +205,11 @@ twitch:
 - **`render`**: resolução, fps (30/60), duração mínima/máxima do corte, `max_file_bytes` (≤ 50 MiB, limite
   do Telegram), fonte e caracteres por linha da legenda.
 - **`editor`**: `max_tokens`, `timeout`, `max_cost_per_clip_usd` (alerta), `tool_choice` e **`pricing`**
-  (US$ por milhão de tokens do modelo escolhido — o código não tem preços embutidos).
+  (US$ por milhão de tokens do modelo escolhido — o código não tem preços embutidos). `frame_interval` (3 s) e
+  `max_frames` (40) controlam os quadros da janela que o Claude vê: imagens 640×360 tiradas só dos
+  quadros-chave (CPU, ~1 s por clipe), ~300 tokens cada (~US$ 0,001 por clipe no Haiku 5.5). Com eles o
+  Claude entende o que acontece na tela (o que explode, cai ou aparece), que a transcrição não captura;
+  `frame_interval: 0` desliga.
 - **`concurrency`**: lives simultâneas, workers de ffmpeg, transcrição e render (GPU).
 
 ## Obtendo os tokens

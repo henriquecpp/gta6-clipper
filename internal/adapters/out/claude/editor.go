@@ -8,6 +8,7 @@ package claude
 import (
 	"context"
 	_ "embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -142,7 +143,7 @@ func (e *Editor) params(req domain.EditRequest) anthropic.MessageNewParams {
 	} else {
 		p.ToolChoice = anthropic.ToolChoiceUnionParam{OfAuto: &anthropic.ToolChoiceAutoParam{DisableParallelToolUse: anthropic.Bool(true)}}
 	}
-	p.Messages = []anthropic.MessageParam{anthropic.NewUserMessage(anthropic.NewTextBlock(userMessage(req)))}
+	p.Messages = []anthropic.MessageParam{anthropic.NewUserMessage(userContent(req, "")...)}
 	if r := req.Retry; r != nil {
 		problem := "Your previous answer was rejected: " + r.Problem + ". Fix every problem and call " + ToolName + " again."
 		switch {
@@ -159,13 +160,34 @@ func (e *Editor) params(req domain.EditRequest) anthropic.MessageNewParams {
 				anthropic.NewAssistantMessage(anthropic.NewTextBlock(r.Previous.RawText)),
 				anthropic.NewUserMessage(anthropic.NewTextBlock(problem)))
 		default:
-			p.Messages[0] = anthropic.NewUserMessage(anthropic.NewTextBlock(userMessage(req) + "\n\n" + problem))
+			p.Messages[0] = anthropic.NewUserMessage(userContent(req, "\n\n"+problem)...)
 		}
 	}
 	return p
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// userContent is the user turn: the frames first (images work best before
+// the text), each preceded by its time, then the text of userMessage plus
+// extra.
+func userContent(req domain.EditRequest, extra string) []anthropic.ContentBlockParamUnion {
+	var blocks []anthropic.ContentBlockParamUnion
+	if len(req.Frames) > 0 {
+		step := ""
+		if len(req.Frames) > 1 {
+			step = fmt.Sprintf(", one every %ss", f2(req.Frames[1].At-req.Frames[0].At))
+		}
+		blocks = append(blocks, anthropic.NewTextBlock(fmt.Sprintf(
+			"## Frames\n%d still frames of the window in order%s, each after its time in seconds (same time base as the transcript).",
+			len(req.Frames), step)))
+		for _, f := range req.Frames {
+			blocks = append(blocks, anthropic.NewTextBlock(f2(f.At)+"s"),
+				anthropic.NewImageBlockBase64("image/jpeg", base64.StdEncoding.EncodeToString(f.JPEG)))
+		}
+	}
+	return append(blocks, anthropic.NewTextBlock(userMessage(req)+extra))
+}
 
 func f2(d time.Duration) string { return strconv.FormatFloat(d.Seconds(), 'f', 2, 64) }
 

@@ -63,8 +63,19 @@ type EditRequest struct {
 	// (English) when the streamer speaks another one: game characters read
 	// correctly there and garbled in Transcript. Empty when not available.
 	GameTranscript Transcript
-	Constraints    EditConstraints
-	Retry          *EditRetry
+	// Frames are still pictures of the window, in order, so the editor sees
+	// what happens on screen (the transcript misses purely visual events).
+	// Empty when not available.
+	Frames      []Frame
+	Constraints EditConstraints
+	Retry       *EditRetry
+}
+
+// Frame is a still JPEG picture of the retained window at At (relative to
+// the window start).
+type Frame struct {
+	At   time.Duration
+	JPEG []byte
 }
 
 // ProposedCaption is a caption as proposed by the editor (seconds).

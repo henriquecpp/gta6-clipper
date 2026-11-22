@@ -73,6 +73,13 @@ type FacecamDetector interface {
 	Detect(ctx context.Context, src domain.MediaRef) (r domain.Rect, ok bool, err error)
 }
 
+// FrameSampler takes still pictures of retained media, one every interval
+// from its start and at most limit, so the editor sees what happens on
+// screen (only after approval; CPU only).
+type FrameSampler interface {
+	Frames(ctx context.Context, src domain.MediaRef, interval time.Duration, limit int) ([]domain.Frame, error)
+}
+
 // Transcriber transcribes retained media locally (whisper.cpp on the GPU).
 // language is the ISO code of the speech to transcribe ("" = detect). Forcing
 // it matters: detection looks only at the start of the audio, and a game

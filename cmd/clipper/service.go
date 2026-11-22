@@ -124,7 +124,9 @@ func runService(_ []string, stderr io.Writer) error {
 		whisper.WithWorkers(cfg.Concurrency.TranscribeWorkers), whisper.WithTimeout(cfg.Whisper.Timeout.D()),
 		whisper.WithBeamSize(cfg.Whisper.BeamSize)), resilience.WhisperPolicy, rdeps)
 	editor := resilience.NewEditor(newEditor(cfg, log), resilience.EditorPolicy, rdeps)
-	produce := app.NewProduceFinalClip(produceConfig(cfg), repo, transcriber, editor, renderer, notifier, media, clk, log, prom, errLog)
+	// The editor sees still frames of the window (CPU, keyframes only).
+	produce := app.NewProduceFinalClip(produceConfig(cfg), repo, transcriber, editor, renderer, notifier, media, clk, log, prom, errLog,
+		app.WithFrameSampler(rend))
 	queue := app.NewJobQueue("produce", produce.Execute, max(cfg.Concurrency.TranscribeWorkers, cfg.Concurrency.RenderWorkers), 100,
 		cfg.HTTP.ShutdownTimeout.D(), log, prom)
 	// The approver's decisions calibrate the detection bar of each streamer.

@@ -105,7 +105,7 @@ func TestPlanForcedToolChoice(t *testing.T) {
 		t.Fatalf("model/max_tokens = %v %v", b["model"], b["max_tokens"])
 	}
 	system := b["system"].([]any)[0].(map[string]any)
-	if system["cache_control"].(map[string]any)["type"] != "ephemeral" || !strings.Contains(system["text"].(string), "You do NOT see the video") {
+	if system["cache_control"].(map[string]any)["type"] != "ephemeral" || !strings.Contains(system["text"].(string), "still frames") {
 		t.Fatalf("system = %v", system["cache_control"])
 	}
 	choice := b["tool_choice"].(map[string]any)
@@ -243,5 +243,33 @@ func TestUserMessageGameTranscript(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Errorf("user message lacks %q:\n%s", want, text)
 		}
+	}
+}
+
+func TestPlanShowsFramesBeforeTheText(t *testing.T) {
+	f := &fakeAPI{replies: []string{message(toolUseContent("t"))}}
+	e := newTestEditor(t, f, ToolChoiceForced)
+	req := request()
+	req.Frames = []domain.Frame{{At: 0, JPEG: []byte{0xff, 0xd8, 1}}, {At: 3 * time.Second, JPEG: []byte{0xff, 0xd8, 2}}}
+	req.Retry = &domain.EditRetry{Problem: "empty"} // nothing to replay: the problem goes in the same turn
+	if _, _, err := e.Plan(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	msgs := f.bodies[0]["messages"].([]any)
+	content := msgs[0].(map[string]any)["content"].([]any)
+	if len(msgs) != 1 || len(content) != 6 {
+		t.Fatalf("messages = %d, blocks = %d: %s", len(msgs), len(content), asJSON(content))
+	}
+	block := func(i int) map[string]any { return content[i].(map[string]any) }
+	if !strings.Contains(block(0)["text"].(string), "2 still frames of the window in order, one every 3.00s") ||
+		block(1)["text"] != "0.00s" || block(3)["text"] != "3.00s" {
+		t.Fatalf("frame labels = %s", asJSON(content))
+	}
+	src := block(4)["source"].(map[string]any)
+	if block(4)["type"] != "image" || src["type"] != "base64" || src["media_type"] != "image/jpeg" || src["data"] != "/9gC" {
+		t.Fatalf("image block = %v", block(4))
+	}
+	if last := block(5)["text"].(string); !strings.HasPrefix(last, "## Metadata") || !strings.Contains(last, "rejected") {
+		t.Fatalf("text block = %s", last)
 	}
 }

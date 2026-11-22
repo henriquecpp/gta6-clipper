@@ -188,3 +188,37 @@ func (d *FacecamDetector) Detect(ctx context.Context, _ domain.MediaRef) (domain
 	a := d.Answers[min(d.Calls-1, len(d.Answers)-1)]
 	return a.Rect, a.OK, a.Err
 }
+
+// FrameSampler returns one scripted picture per interval (or Err) and records
+// the calls.
+type FrameSampler struct {
+	mu sync.Mutex
+	// Window is the media duration the fake pretends to sample (default 90 s).
+	Window    time.Duration
+	Err       error
+	Intervals []time.Duration
+}
+
+var _ app.FrameSampler = (*FrameSampler)(nil)
+
+// Frames returns frames at 0, interval, 2×interval... within Window, at most limit.
+func (s *FrameSampler) Frames(ctx context.Context, _ domain.MediaRef, interval time.Duration, limit int) ([]domain.Frame, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Intervals = append(s.Intervals, interval)
+	if s.Err != nil {
+		return nil, s.Err
+	}
+	window := s.Window
+	if window <= 0 {
+		window = 90 * time.Second
+	}
+	var out []domain.Frame
+	for at := time.Duration(0); at < window && len(out) < limit && interval > 0; at += interval {
+		out = append(out, domain.Frame{At: at, JPEG: []byte("jpeg")})
+	}
+	return out, nil
+}

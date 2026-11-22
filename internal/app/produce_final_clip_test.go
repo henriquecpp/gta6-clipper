@@ -411,3 +411,50 @@ func TestProduceTranscribesInTheStreamerLanguage(t *testing.T) {
 		})
 	}
 }
+
+func TestProduceShowsFramesToTheEditor(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name         string
+		every        time.Duration
+		maxFrames    int
+		err          error
+		wantInterval time.Duration
+		wantFrames   int
+	}{
+		{name: "every 3 s over the 90 s window", every: 3 * time.Second, maxFrames: 40, wantInterval: 3 * time.Second, wantFrames: 30},
+		{name: "wider spacing to stay within the cap", every: 3 * time.Second, maxFrames: 20, wantInterval: 4500 * time.Millisecond, wantFrames: 20},
+		{name: "rounded up to 100 ms", every: 2 * time.Second, maxFrames: 7, wantInterval: 12900 * time.Millisecond, wantFrames: 7},
+		{name: "sampling failure is not fatal", every: 3 * time.Second, maxFrames: 40, err: errors.New("ffmpeg died"), wantInterval: 3 * time.Second},
+		{name: "disabled", maxFrames: 40},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newProduceEnv(t)
+			sampler := &fakes.FrameSampler{Err: tc.err}
+			e.produce = app.NewProduceFinalClip(app.ProduceConfig{
+				MinDuration: 15 * time.Second, MaxDuration: 60 * time.Second, PeakTolerance: 5 * time.Second,
+				HeadlineMaxChars: 60, SnapMargin: 150 * time.Millisecond, Pricing: pricing, MaxCost: 50_000,
+				Width: 1080, Height: 1920, FPS: 30, MaxBytes: 45 << 20, FrameInterval: tc.every, MaxFrames: tc.maxFrames,
+				Streamers: map[string]domain.Streamer{"streamer_a": {Login: "streamer_a"}},
+			}, e.repo, e.trans, e.editor, e.renderer, e.notifier, e.media, e.clock, discardLog(), e.metrics, nil,
+				app.WithFrameSampler(sampler))
+			e.approved(t, "c1")
+			if err := e.produce.Execute(ctx, "c1"); err != nil {
+				t.Fatal(err)
+			}
+			if tc.every == 0 {
+				if len(sampler.Intervals) != 0 {
+					t.Fatalf("sampled while disabled: %v", sampler.Intervals)
+				}
+			} else if len(sampler.Intervals) != 1 || sampler.Intervals[0] != tc.wantInterval {
+				t.Fatalf("intervals = %v, want [%v]", sampler.Intervals, tc.wantInterval)
+			}
+			if got := len(e.editor.Requests[0].Frames); got != tc.wantFrames {
+				t.Fatalf("frames sent = %d, want %d", got, tc.wantFrames)
+			}
+			if e.get(t, "c1").State != domain.StateDelivered {
+				t.Fatal("clip not delivered")
+			}
+		})
+	}
+}

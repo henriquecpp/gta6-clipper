@@ -201,3 +201,31 @@ func TestFinalKeepsAudioInSync(t *testing.T) {
 	}
 	assertFlashAt(t, string(ref), 1.7)
 }
+
+func TestFramesFromTheSample(t *testing.T) {
+	r := New(context.Background(), Config{Encoder: EncoderX264, Threads: 2}, WithLogger(slog.New(slog.DiscardHandler)))
+	src := copySample(t)
+	dur, _, _ := probe(t, string(src))
+	frames, err := r.Frames(context.Background(), src, 3*time.Second, 40)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// One picture every 3 s over the whole sample (the last one may fall past the end).
+	if want := int(dur/3) + 1; len(frames) < want-1 || len(frames) > want {
+		t.Fatalf("%d frames for %.1fs, want about %d", len(frames), dur, want)
+	}
+	f := filepath.Join(t.TempDir(), "f.jpg")
+	if err := os.WriteFile(f, frames[1].JPEG, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, w, h := probe(t, f); w != FrameWidth || h != FrameWidth*9/16 {
+		t.Fatalf("frame %dx%d", w, h)
+	}
+	if frames[1].At != 3*time.Second {
+		t.Fatalf("second frame at %v", frames[1].At)
+	}
+	capped, err := r.Frames(context.Background(), src, time.Second, 5)
+	if err != nil || len(capped) != 5 {
+		t.Fatalf("capped: %d frames, %v", len(capped), err)
+	}
+}

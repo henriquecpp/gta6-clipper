@@ -141,7 +141,12 @@ type Editor struct {
 	MaxCostPerClipUSD float64  `yaml:"max_cost_per_clip_usd"`
 	ToolChoice        string   `yaml:"tool_choice"`
 	PeakTolerance     Duration `yaml:"peak_tolerance"`
-	Pricing           Pricing  `yaml:"pricing"`
+	// FrameInterval spaces the still frames of the window the editor sees
+	// (0 disables them); MaxFrames caps how many (the spacing grows on long
+	// windows). Each 640x360 frame is about 300 input tokens.
+	FrameInterval Duration `yaml:"frame_interval"`
+	MaxFrames     int      `yaml:"max_frames"`
+	Pricing       Pricing  `yaml:"pricing"`
 }
 
 // Pricing in USD per million tokens.

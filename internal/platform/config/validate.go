@@ -134,6 +134,14 @@ func (c *Config) Validate() error {
 	if e.PeakTolerance < 0 {
 		add("editor.peak_tolerance must be >= 0")
 	}
+	if e.FrameInterval < 0 {
+		add("editor.frame_interval must be >= 0 (0 disables the frames)")
+	}
+	// The Messages API takes at most 100 images per request on models with a
+	// 200K context window (600 on larger ones).
+	if e.MaxFrames < 0 || e.MaxFrames > 100 {
+		add("editor.max_frames must be in [0, 100] (got %d)", e.MaxFrames)
+	}
 	if e.Pricing.Input < 0 || e.Pricing.Output < 0 || e.Pricing.CacheWrite < 0 || e.Pricing.CacheRead < 0 {
 		add("editor.pricing values must be >= 0")
 	}
