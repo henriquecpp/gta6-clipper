@@ -5,6 +5,7 @@ go 1.27.4
 require (
 	github.com/anthropics/anthropic-sdk-go/v2 v2.13.0
 	github.com/coder/websocket v1.8.15
+	github.com/esimov/pigo v1.5.0
 	github.com/google/uuid v1.6.0
 	github.com/mymmrac/telego v1.13.0
 	github.com/pressly/goose/v3 v3.30.1

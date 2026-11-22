@@ -21,6 +21,15 @@ const stackTopShare = 0.35
 // yuv420p).
 func stackTop(h int) int { return int(float64(h)*stackTopShare) / 2 * 2 }
 
+// CamBandAspect is the width/height of the facecam band of the stack layout
+// in a w x h video (the facecam detector shapes its crops to it).
+func CamBandAspect(w, h int) float64 {
+	if top := stackTop(h); top > 0 {
+		return float64(w) / float64(top)
+	}
+	return 0
+}
+
 // seekMargin is how far before the cut the input seek lands. Seeking in
 // MPEG-TS stops on any packet, not on a keyframe, and the audio and video of
 // an instant are interleaved apart; the margin covers more than one GOP (2 s

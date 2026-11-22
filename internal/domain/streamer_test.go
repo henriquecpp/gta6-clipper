@@ -102,3 +102,20 @@ func TestGameFilterAllows(t *testing.T) {
 		}
 	}
 }
+
+func TestAutoLayout(t *testing.T) {
+	if !LayoutAuto.Valid() {
+		t.Fatal("auto must be a valid layout")
+	}
+	if err := (Streamer{Login: "a", Layout: LayoutAuto}).Validate(); err != nil {
+		t.Fatalf("auto without fallback regions: %v", err)
+	}
+	ok := Streamer{Login: "a", Layout: LayoutAuto, Stack: StackRegions{Facecam: Rect{X: 0.7, W: 0.3, H: 0.3}, Gameplay: FullFrame}}
+	if err := ok.Validate(); err != nil {
+		t.Fatalf("auto with fallback regions: %v", err)
+	}
+	bad := Streamer{Login: "a", Layout: LayoutAuto, Stack: StackRegions{Facecam: Rect{X: 0.9, W: 0.3, H: 0.3}}}
+	if err := bad.Validate(); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("auto with invalid fallback regions: %v", err)
+	}
+}

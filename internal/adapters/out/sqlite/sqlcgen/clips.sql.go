@@ -12,7 +12,7 @@ import (
 )
 
 const getClip = `-- name: GetClip :one
-SELECT id, streamer, stream_id, game, stream_title, state, peak_ms, window_from_ms, window_to_ms, score, signals, source_media, preview_media, final_media, preview_message, headline, post_text, micro_usd, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens, failure_reason, failed_from, decision, decided_at, created_at, updated_at, detected_at, preview_sent_at, approved_at, discarded_at, expired_at, editing_at, rendered_at, delivered_at, failed_at, peak_at, live_offset_ms, edit_plan, final_message, published_id, published_url, publish_error, publishing_at, published_at FROM clips WHERE id = ?
+SELECT id, streamer, stream_id, game, stream_title, state, peak_ms, window_from_ms, window_to_ms, score, signals, source_media, preview_media, final_media, preview_message, headline, post_text, micro_usd, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens, failure_reason, failed_from, decision, decided_at, created_at, updated_at, detected_at, preview_sent_at, approved_at, discarded_at, expired_at, editing_at, rendered_at, delivered_at, failed_at, peak_at, live_offset_ms, edit_plan, final_message, published_id, published_url, publish_error, publishing_at, published_at, layout, stack_regions FROM clips WHERE id = ?
 `
 
 func (q *Queries) GetClip(ctx context.Context, id string) (Clip, error) {
@@ -65,12 +65,14 @@ func (q *Queries) GetClip(ctx context.Context, id string) (Clip, error) {
 		&i.PublishError,
 		&i.PublishingAt,
 		&i.PublishedAt,
+		&i.Layout,
+		&i.StackRegions,
 	)
 	return i, err
 }
 
 const listClipsByState = `-- name: ListClipsByState :many
-SELECT id, streamer, stream_id, game, stream_title, state, peak_ms, window_from_ms, window_to_ms, score, signals, source_media, preview_media, final_media, preview_message, headline, post_text, micro_usd, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens, failure_reason, failed_from, decision, decided_at, created_at, updated_at, detected_at, preview_sent_at, approved_at, discarded_at, expired_at, editing_at, rendered_at, delivered_at, failed_at, peak_at, live_offset_ms, edit_plan, final_message, published_id, published_url, publish_error, publishing_at, published_at FROM clips
+SELECT id, streamer, stream_id, game, stream_title, state, peak_ms, window_from_ms, window_to_ms, score, signals, source_media, preview_media, final_media, preview_message, headline, post_text, micro_usd, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens, failure_reason, failed_from, decision, decided_at, created_at, updated_at, detected_at, preview_sent_at, approved_at, discarded_at, expired_at, editing_at, rendered_at, delivered_at, failed_at, peak_at, live_offset_ms, edit_plan, final_message, published_id, published_url, publish_error, publishing_at, published_at, layout, stack_regions FROM clips
 WHERE state IN (/*SLICE:states*/?)
 ORDER BY created_at, id
 `
@@ -141,6 +143,8 @@ func (q *Queries) ListClipsByState(ctx context.Context, states []string) ([]Clip
 			&i.PublishError,
 			&i.PublishingAt,
 			&i.PublishedAt,
+			&i.Layout,
+			&i.StackRegions,
 		); err != nil {
 			return nil, err
 		}
@@ -167,7 +171,8 @@ INSERT INTO clips (
     detected_at, preview_sent_at, approved_at, discarded_at, expired_at,
     editing_at, rendered_at, delivered_at, failed_at,
     peak_at, live_offset_ms, edit_plan,
-    final_message, published_id, published_url, publish_error, publishing_at, published_at
+    final_message, published_id, published_url, publish_error, publishing_at, published_at,
+    layout, stack_regions
 ) VALUES (
     ?, ?, ?, ?, ?, ?,
     ?, ?, ?, ?, ?,
@@ -179,7 +184,8 @@ INSERT INTO clips (
     ?, ?, ?, ?, ?,
     ?, ?, ?, ?,
     ?, ?, ?,
-    ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?,
+    ?, ?
 )
 ON CONFLICT (id) DO UPDATE SET
     streamer           = excluded.streamer,
@@ -226,7 +232,9 @@ ON CONFLICT (id) DO UPDATE SET
     published_url      = excluded.published_url,
     publish_error      = excluded.publish_error,
     publishing_at      = excluded.publishing_at,
-    published_at       = excluded.published_at
+    published_at       = excluded.published_at,
+    layout             = excluded.layout,
+    stack_regions      = excluded.stack_regions
 `
 
 type UpsertClipParams struct {
@@ -276,6 +284,8 @@ type UpsertClipParams struct {
 	PublishError     string
 	PublishingAt     sql.NullString
 	PublishedAt      sql.NullString
+	Layout           string
+	StackRegions     string
 }
 
 func (q *Queries) UpsertClip(ctx context.Context, arg UpsertClipParams) error {
@@ -326,6 +336,8 @@ func (q *Queries) UpsertClip(ctx context.Context, arg UpsertClipParams) error {
 		arg.PublishError,
 		arg.PublishingAt,
 		arg.PublishedAt,
+		arg.Layout,
+		arg.StackRegions,
 	)
 	return err
 }

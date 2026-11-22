@@ -35,7 +35,7 @@ func TestExampleConfigIsValid(t *testing.T) {
 		t.Fatalf("detection = %+v", d)
 	}
 	ss := cfg.DomainStreamers()
-	if len(ss) != 1 || ss[0].Login != "exemplo_streamer" || ss[0].Offsets.Chat != 8*time.Second || ss[0].Layout != domain.LayoutBlur {
+	if len(ss) != 1 || ss[0].Login != "exemplo_streamer" || ss[0].Offsets.Chat != 8*time.Second || ss[0].Layout != domain.LayoutAuto {
 		t.Fatalf("streamers = %+v", ss)
 	}
 }

@@ -61,17 +61,30 @@ type SendPreview struct {
 	log      *slog.Logger
 	metrics  Metrics
 	errors   *ErrorLog
+	framing  *Framing
 }
 
+// PreviewOption configures SendPreview.
+type PreviewOption func(*SendPreview)
+
+// WithFraming decides the framing of each clip (auto layout: facecam
+// detection); without it the configured layout is used.
+func WithFraming(f *Framing) PreviewOption { return func(u *SendPreview) { u.framing = f } }
+
 // NewSendPreview builds the use case. metrics and errs may be nil.
-func NewSendPreview(cfg PreviewConfig, repo ClipRepository, r Renderer, n Notifier, clock Clock, log *slog.Logger, metrics Metrics, errs *ErrorLog) *SendPreview {
+func NewSendPreview(cfg PreviewConfig, repo ClipRepository, r Renderer, n Notifier, clock Clock, log *slog.Logger, metrics Metrics, errs *ErrorLog,
+	opts ...PreviewOption) *SendPreview {
 	if metrics == nil {
 		metrics = NopMetrics{}
 	}
 	if errs == nil {
 		errs = &ErrorLog{}
 	}
-	return &SendPreview{cfg: cfg, repo: repo, renderer: r, notifier: n, clock: clock, log: log, metrics: metrics, errors: errs}
+	u := &SendPreview{cfg: cfg, repo: repo, renderer: r, notifier: n, clock: clock, log: log, metrics: metrics, errors: errs}
+	for _, o := range opts {
+		o(u)
+	}
+	return u
 }
 
 // Execute processes one clip. A clip that is no longer detected is skipped
@@ -86,6 +99,9 @@ func (u *SendPreview) Execute(ctx context.Context, id domain.ClipID) error {
 	}
 	start, length := domain.PreviewWindow(c.Window, c.Moment.Peak, u.cfg.Duration, u.cfg.Before)
 	layout, stack := layoutOf(u.cfg.Streamers, c.Streamer)
+	if u.framing != nil {
+		layout, stack = u.framing.Resolve(ctx, c)
+	}
 	spec := domain.PreviewSpec{
 		Start: start, Duration: length, Width: u.cfg.Width, Height: u.cfg.Height, FPS: u.cfg.FPS,
 		Layout: layout, Stack: stack, MaxBytes: u.cfg.MaxBytes,
@@ -111,6 +127,7 @@ func (u *SendPreview) Execute(ctx context.Context, id domain.ClipID) error {
 			return err
 		}
 		cur.PreviewMedia, cur.PreviewMessage = preview, msg
+		cur.Layout, cur.Stack = layout, stack // the final video reuses the approved framing
 		if err := cur.Transition(domain.StatePreviewSent, u.clock.Now()); err != nil {
 			return err
 		}

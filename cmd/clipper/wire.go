@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/claude"
+	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/facecam"
+	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/render"
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/youtube"
 	"github.com/henriquecpp/gta6-clipper/internal/app"
 	"github.com/henriquecpp/gta6-clipper/internal/domain"
@@ -139,6 +141,20 @@ type disabledEditor struct{}
 
 func (disabledEditor) Plan(context.Context, domain.EditRequest) (domain.EditProposal, domain.Usage, error) {
 	return domain.EditProposal{}, domain.Usage{}, notConfigured("anthropic is not configured (ANTHROPIC_API_KEY / ANTHROPIC_MODEL)")
+}
+
+// newFacecamDetector builds the CPU facecam detector of the auto layout, or
+// nil when no streamer uses it (the cascade is not even loaded).
+func newFacecamDetector(c *config.Config, log *slog.Logger) app.FacecamDetector {
+	for _, s := range c.DomainStreamers() {
+		if s.Layout == domain.LayoutAuto {
+			return facecam.New(facecam.Config{
+				Threads:   2,
+				CamAspect: render.CamBandAspect(c.Render.Width, c.Render.Height),
+			}, facecam.WithLogger(log))
+		}
+	}
+	return nil
 }
 
 // publishConfig maps the youtube settings to the publication use case.

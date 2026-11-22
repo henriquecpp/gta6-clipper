@@ -110,7 +110,9 @@ func runService(_ []string, stderr io.Writer) error {
 	renderer := resilience.NewRenderer(rend, resilience.FFmpegPolicy, rdeps)
 	notifier := resilience.NewNotifier(tg.notifier, resilience.NetworkPolicy, rdeps)
 	ttl := cfg.Approval.TTL.D()
-	sendPreview := app.NewSendPreview(previewConfig(cfg), repo, renderer, notifier, clk, log, prom, errLog)
+	// Auto layout: the facecam is found in each clip (CPU only, before the preview).
+	framing := app.NewFraming(newFacecamDetector(cfg, log), streamerMap(cfg), clk, log, prom)
+	sendPreview := app.NewSendPreview(previewConfig(cfg), repo, renderer, notifier, clk, log, prom, errLog, app.WithFraming(framing))
 	detectMoment := app.NewDetectMoment(detectionConfig(cfg), repo, newClipID, clk, log,
 		app.WithCapture(media), app.WithDetectMetrics(prom),
 		app.WithClipHandler(func(ctx context.Context, c *domain.Clip) {

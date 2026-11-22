@@ -87,6 +87,8 @@ func RunClipRepository(t *testing.T, newRepo func(t *testing.T) app.ClipReposito
 			}
 		}
 		c.PreviewMedia = "/pending/c-roundtrip.preview.mp4"
+		c.Layout = domain.LayoutStack
+		c.Stack = domain.StackRegions{Facecam: domain.Rect{X: 0.775, Y: 0.453, W: 0.217, H: 0.286}, Gameplay: domain.FullFrame}
 		c.PreviewMessage = "123:456,789:10"
 		c.FinalMedia = "/output/c-roundtrip.mp4"
 		c.Headline = "Ele pulou da ponte!"

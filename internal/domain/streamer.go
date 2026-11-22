@@ -17,16 +17,22 @@ const (
 	LayoutStack Layout = "stack"
 	// LayoutCrop is a simple centre crop.
 	LayoutCrop Layout = "crop"
+	// LayoutAuto finds the facecam in every clip: stack when one is found,
+	// otherwise the last position found, the configured stack regions or blur.
+	LayoutAuto Layout = "auto"
 )
 
 // Valid reports whether l is a known layout.
 func (l Layout) Valid() bool {
 	switch l {
-	case LayoutBlur, LayoutStack, LayoutCrop:
+	case LayoutBlur, LayoutStack, LayoutCrop, LayoutAuto:
 		return true
 	}
 	return false
 }
+
+// FullFrame is the whole source frame.
+var FullFrame = Rect{W: 1, H: 1}
 
 // Rect is a region in normalized coordinates (0–1) of the source frame.
 type Rect struct {
@@ -75,6 +81,9 @@ func (s Streamer) Validate() error {
 	}
 	if s.Layout == LayoutStack && (!s.Stack.Facecam.Valid() || !s.Stack.Gameplay.Valid()) {
 		return fmt.Errorf("%w: streamer %s: stack layout needs valid facecam and gameplay regions", ErrInvalidArgument, s.Login)
+	}
+	if s.Layout == LayoutAuto && s.Stack != (StackRegions{}) && (!s.Stack.Facecam.Valid() || !s.Stack.Gameplay.Valid()) {
+		return fmt.Errorf("%w: streamer %s: the fallback stack regions of the auto layout are invalid", ErrInvalidArgument, s.Login)
 	}
 	if s.Offsets.CaptureLatency < 0 || s.Offsets.Chat < 0 || s.Offsets.Clip < 0 {
 		return fmt.Errorf("%w: streamer %s: offsets must be >= 0", ErrInvalidArgument, s.Login)

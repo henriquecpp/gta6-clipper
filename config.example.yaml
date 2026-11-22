@@ -5,7 +5,10 @@ streamers:
   - login: exemplo_streamer
     language: en
     allows_clips: true
-    layout: blur            # blur | stack | crop
+    # auto: finds the facecam in every clip (stack layout when found; follows the camera
+    # if the streamer moves it) | blur | stack (fixed regions below) | crop
+    layout: auto
+    # Fixed regions for stack, or the fallback of auto when a clip has no clear camera:
     # stack: { facecam: [0.70, 0.00, 0.30, 0.30], gameplay: [0.0, 0.0, 1.0, 1.0] }
     offsets: { capture_latency: 4s, chat: 8s, clip: 5s }
 

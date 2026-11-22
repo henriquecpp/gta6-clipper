@@ -157,3 +157,34 @@ func (m *Metrics) StateCount(st domain.ClipState) int {
 	defer m.mu.Unlock()
 	return m.States[st]
 }
+
+// FacecamDetector returns scripted detections in order (the last repeats).
+type FacecamDetector struct {
+	mu      sync.Mutex
+	Answers []FacecamAnswer
+	Calls   int
+}
+
+// FacecamAnswer is one scripted detection.
+type FacecamAnswer struct {
+	Rect domain.Rect
+	OK   bool
+	Err  error
+}
+
+var _ app.FacecamDetector = (*FacecamDetector)(nil)
+
+// Detect returns the next scripted answer.
+func (d *FacecamDetector) Detect(ctx context.Context, _ domain.MediaRef) (domain.Rect, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.Rect{}, false, err
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.Calls++
+	if len(d.Answers) == 0 {
+		return domain.Rect{}, false, nil
+	}
+	a := d.Answers[min(d.Calls-1, len(d.Answers)-1)]
+	return a.Rect, a.OK, a.Err
+}

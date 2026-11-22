@@ -104,6 +104,12 @@ type Clip struct {
 	// publication progresses.
 	FinalMessage MessageRef
 
+	// Layout and Stack are the framing chosen for this clip when its preview
+	// was made (facecam found by the auto layout, or the configured one), so
+	// the final video looks like the approved preview. Empty: not decided.
+	Layout Layout
+	Stack  StackRegions
+
 	// PublishedID and PublishedURL locate the published video (empty until
 	// published); PublishError is why the last attempt failed.
 	PublishedID  string

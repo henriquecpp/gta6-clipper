@@ -55,6 +55,8 @@ type Clip struct {
 	PublishError     string
 	PublishingAt     sql.NullString
 	PublishedAt      sql.NullString
+	Layout           string
+	StackRegions     string
 }
 
 type Decision struct {

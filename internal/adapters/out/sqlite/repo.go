@@ -69,6 +69,10 @@ func (r *Repo) save(ctx context.Context, c *domain.Clip) error {
 	if err != nil {
 		return fmt.Errorf("encode plan of clip %s: %w", c.ID, err)
 	}
+	stack, err := encodeStack(c.Stack)
+	if err != nil {
+		return fmt.Errorf("encode stack regions of clip %s: %w", c.ID, err)
+	}
 	st := func(s domain.ClipState) sql.NullString { return nullTime(c.StateTimes[s]) }
 	p := sqlcgen.UpsertClipParams{
 		ID:               string(c.ID),
@@ -117,6 +121,8 @@ func (r *Repo) save(ctx context.Context, c *domain.Clip) error {
 		PublishError:     c.PublishError,
 		PublishingAt:     st(domain.StatePublishing),
 		PublishedAt:      st(domain.StatePublished),
+		Layout:           string(c.Layout),
+		StackRegions:     stack,
 	}
 	if err := r.q.UpsertClip(ctx, p); err != nil {
 		return fmt.Errorf("upsert clip %s: %w", c.ID, err)
@@ -261,6 +267,7 @@ func toDomain(row sqlcgen.Clip) (*domain.Clip, error) {
 		FinalMedia:     domain.MediaRef(row.FinalMedia),
 		PreviewMessage: domain.MessageRef(row.PreviewMessage),
 		FinalMessage:   domain.MessageRef(row.FinalMessage),
+		Layout:         domain.Layout(row.Layout),
 		PublishedID:    row.PublishedID,
 		PublishedURL:   row.PublishedUrl,
 		PublishError:   row.PublishError,
@@ -300,6 +307,9 @@ func toDomain(row sqlcgen.Clip) (*domain.Clip, error) {
 	}
 	if c.Plan, err = decodePlan(row.EditPlan); err != nil {
 		return nil, fmt.Errorf("decode plan of clip %s: %w", row.ID, err)
+	}
+	if c.Stack, err = decodeStack(row.StackRegions); err != nil {
+		return nil, fmt.Errorf("decode stack regions of clip %s: %w", row.ID, err)
 	}
 	stateCols := map[domain.ClipState]sql.NullString{
 		domain.StateDetected:    row.DetectedAt,
@@ -372,6 +382,32 @@ func decodePlan(s string) (*domain.EditPlan, error) {
 		p.Captions = append(p.Captions, domain.Caption{Start: ms(c.StartMS), End: ms(c.EndMS), Text: c.Text})
 	}
 	return p, nil
+}
+
+type stackJSON struct {
+	Facecam  [4]float64 `json:"facecam"`
+	Gameplay [4]float64 `json:"gameplay"`
+}
+
+func encodeStack(s domain.StackRegions) (string, error) {
+	if s == (domain.StackRegions{}) {
+		return "", nil
+	}
+	f, g := s.Facecam, s.Gameplay
+	b, err := json.Marshal(stackJSON{Facecam: [4]float64{f.X, f.Y, f.W, f.H}, Gameplay: [4]float64{g.X, g.Y, g.W, g.H}})
+	return string(b), err
+}
+
+func decodeStack(s string) (domain.StackRegions, error) {
+	if s == "" {
+		return domain.StackRegions{}, nil
+	}
+	var j stackJSON
+	if err := json.Unmarshal([]byte(s), &j); err != nil {
+		return domain.StackRegions{}, err
+	}
+	r := func(v [4]float64) domain.Rect { return domain.Rect{X: v[0], Y: v[1], W: v[2], H: v[3]} }
+	return domain.StackRegions{Facecam: r(j.Facecam), Gameplay: r(j.Gameplay)}, nil
 }
 
 func msPos(ms int64) domain.StreamPos { return domain.StreamPos(time.Duration(ms) * time.Millisecond) }

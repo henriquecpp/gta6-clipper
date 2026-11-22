@@ -177,7 +177,10 @@ func (u *ProduceFinalClip) edit(ctx context.Context, c *domain.Clip, log *slog.L
 		}
 	}
 
-	layout, stack := layoutOf(u.cfg.Streamers, c.Streamer)
+	layout, stack := c.Layout, c.Stack
+	if !layout.Valid() || layout == domain.LayoutAuto {
+		layout, stack = layoutOf(u.cfg.Streamers, c.Streamer)
+	}
 	spec := domain.RenderSpec{
 		ClipID: c.ID, Streamer: c.Streamer, Start: plan.Start, End: plan.End,
 		Width: u.cfg.Width, Height: u.cfg.Height, FPS: u.cfg.FPS, Layout: layout, Stack: stack,
@@ -338,12 +341,18 @@ func (u *ProduceFinalClip) fail(ctx context.Context, id domain.ClipID, cause err
 	return err
 }
 
-// layoutOf returns the vertical layout of a streamer; unknown streamers and
-// invalid layouts fall back to blur.
+// layoutOf returns the configured vertical layout of a streamer; unknown
+// streamers and invalid layouts fall back to blur. Without a detection, the
+// auto layout uses its configured stack regions, or blur.
 func layoutOf(streamers map[string]domain.Streamer, login string) (domain.Layout, domain.StackRegions) {
 	st := streamers[login]
-	if !st.Layout.Valid() {
+	switch {
+	case !st.Layout.Valid():
 		return domain.LayoutBlur, st.Stack
+	case st.Layout == domain.LayoutAuto && st.Stack.Facecam.Valid() && st.Stack.Gameplay.Valid():
+		return domain.LayoutStack, st.Stack
+	case st.Layout == domain.LayoutAuto:
+		return domain.LayoutBlur, domain.StackRegions{}
 	}
 	return st.Layout, st.Stack
 }

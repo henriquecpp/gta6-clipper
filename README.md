@@ -165,7 +165,7 @@ streamers:
   - login: nome_do_streamer   # login da Twitch (minúsculo)
     language: en               # idioma da fala: escolhe os emotes de risada (en, pt...)
     allows_clips: true         # só canais com true são monitorados
-    layout: blur               # blur | stack | crop
+    layout: auto               # auto | blur | stack | crop
     # stack: { facecam: [0.70, 0.00, 0.30, 0.30], gameplay: [0, 0, 1, 1] }  # [x, y, w, h] de 0 a 1
     offsets: { capture_latency: 4s, chat: 8s, clip: 5s }
 
@@ -179,13 +179,23 @@ twitch:
   volta para GTA VI, a captura recomeça (com novo aquecimento de 5 min). Clipes já retidos não são afetados.
   Vale o nome exato da categoria (sem diferenciar maiúsculas) ou o id (`1867279146` = Grand Theft Auto VI).
   O padrão, se a chave não existir, é só GTA VI; `games: []` monitora qualquer jogo.
-- **Layouts:** `blur` — vídeo 16:9 no meio sobre ele mesmo ampliado e desfocado; `stack` — câmera em cima
-  (35%) e jogo embaixo (65%), com as regiões em coordenadas normalizadas do quadro original; `crop` — recorte
-  central. Para streamers com webcam, prefira `stack`: é o formato que mais funciona em shorts, e a manchete
-  vira uma faixa na divisa entre câmera e jogo, sem cobrir o rosto. As regiões são `[x, y, w, h]` de 0 a 1:
-  meça a webcam num quadro da cena de jogo do streamer (ex.: webcam de 990 a 1270 px na horizontal e de 324 a
-  500 px na vertical num quadro 1280×720 → `facecam: [0.773, 0.450, 0.219, 0.244]`). Se o streamer mudar a
-  webcam de lugar, a região precisa ser medida de novo.
+- **Layouts:** `auto` (recomendado) — acha a webcam sozinho em cada clipe e usa `stack`; `blur` — vídeo 16:9
+  no meio sobre ele mesmo ampliado e desfocado; `stack` — câmera em cima (35%) e jogo embaixo (65%), com
+  regiões fixas em coordenadas normalizadas do quadro original; `crop` — recorte central. O `stack` é o formato
+  que mais funciona em shorts, e a manchete vira uma faixa na divisa entre câmera e jogo, sem cobrir o rosto.
+- **Webcam automática (`layout: auto`):** antes de cada prévia, o app olha 12 quadros-chave da janela retida
+  (640×360, tons de cinza), acha o rosto que fica parado no mesmo lugar (detector de rosto pigo, em Go puro) e
+  recorta a câmera: se ela tem moldura, pelas bordas onde o fundo do quarto fica parado e o jogo se mexe; se o
+  streamer usa fundo removido, por um recorte proporcional ao rosto. Roda só na CPU, ~1–2 s por clipe e um por
+  vez, sem disputar a GPU com o whisper e o NVENC. Como cada clipe detecta de novo, se o streamer mudar a
+  webcam de lugar o próximo clipe já acompanha. O enquadramento escolhido fica salvo no clipe (a prévia e o
+  vídeo final saem iguais) e aparece no log como `facecam found`. Sem câmera clara (cutscene, streamer sem
+  webcam, rosto de personagem do jogo), usa a última posição achada daquele streamer na última hora, depois a
+  região `stack` configurada (se houver) e por fim `blur`.
+- **Regiões manuais (`stack`, ou fallback do `auto`):** `[x, y, w, h]` de 0 a 1, medidas num quadro da cena
+  de jogo (ex.: webcam de 990 a 1270 px na horizontal e de 324 a 500 px na vertical num quadro 1280×720 →
+  `facecam: [0.773, 0.450, 0.219, 0.244]`). Para testar a detecção num clipe retido:
+  `docker compose run --rm --no-deps app dryrun <clip_id>` mostra `framing: stack {...}`.
   A prévia do Telegram usa o mesmo layout, em 480×854 (`render.preview_height`; a largura segue a proporção
   do vídeo final), então o que você aprova já tem a cara do short. Ela dura `render.preview_duration`, com
   `render.preview_before` (25 s) antes do pico e o resto depois, para mostrar a reação do streamer; o trecho

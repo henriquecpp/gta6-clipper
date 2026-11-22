@@ -139,3 +139,12 @@ func TestFinalRetriesOnSize(t *testing.T) {
 		t.Fatal("expected error for empty cut")
 	}
 }
+
+func TestCamBandAspect(t *testing.T) {
+	if got := CamBandAspect(1080, 1920); got != 1080.0/672.0 {
+		t.Fatalf("aspect = %v", got)
+	}
+	if CamBandAspect(1080, 0) != 0 {
+		t.Fatal("zero height")
+	}
+}

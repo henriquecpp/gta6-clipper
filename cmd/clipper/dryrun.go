@@ -16,7 +16,9 @@ import (
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/render"
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/sqlite"
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/whisper"
+	"github.com/henriquecpp/gta6-clipper/internal/app"
 	"github.com/henriquecpp/gta6-clipper/internal/domain"
+	"github.com/henriquecpp/gta6-clipper/internal/platform/clock"
 	"github.com/henriquecpp/gta6-clipper/internal/platform/logging"
 )
 
@@ -113,15 +115,17 @@ func dryRun(args []string, out io.Writer) error {
 		OutputDir:      cfg.Render.OutputDir,
 		Style:          render.ASSStyle{Font: cfg.Render.Font, MaxLineChars: cfg.Render.MaxLineChars},
 	}, render.WithLogger(log))
-	st := pc.Streamers[c.Streamer]
-	layout := st.Layout
-	if !layout.Valid() {
-		layout = domain.LayoutBlur
+	// The clip's framing (decided at preview time), or a fresh one (auto layout:
+	// facecam detection) for clips that never had a preview.
+	layout, stack := c.Layout, c.Stack
+	if !layout.Valid() || layout == domain.LayoutAuto {
+		layout, stack = app.NewFraming(newFacecamDetector(cfg, log), pc.Streamers, clock.Real{}, log, nil).Resolve(ctx, c)
 	}
+	_, _ = fmt.Fprintf(out, "framing: %s %+v\n", layout, stack.Facecam)
 	t1 := time.Now()
 	video, err := rend.Final(ctx, c.SourceMedia, domain.RenderSpec{
 		ClipID: c.ID, Streamer: c.Streamer, Start: plan.Start, End: plan.End,
-		Width: pc.Width, Height: pc.Height, FPS: pc.FPS, Layout: layout, Stack: st.Stack,
+		Width: pc.Width, Height: pc.Height, FPS: pc.FPS, Layout: layout, Stack: stack,
 		Headline: plan.Headline, Captions: plan.Captions, Words: transcript.Between(plan.Start, plan.End), MaxBytes: pc.MaxBytes,
 	})
 	if err != nil {

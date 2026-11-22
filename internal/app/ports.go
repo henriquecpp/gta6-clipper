@@ -66,6 +66,13 @@ type Renderer interface {
 	Final(ctx context.Context, src domain.MediaRef, spec domain.RenderSpec) (domain.MediaRef, error)
 }
 
+// FacecamDetector finds the streamer's camera in retained media. It must be
+// cheap (CPU only: it runs before every preview, next to the GPU work).
+// ok is false when no camera is clearly visible.
+type FacecamDetector interface {
+	Detect(ctx context.Context, src domain.MediaRef) (r domain.Rect, ok bool, err error)
+}
+
 // Transcriber transcribes retained media locally (whisper.cpp on the GPU).
 // language is the ISO code of the speech to transcribe ("" = detect). Forcing
 // it matters: detection looks only at the start of the audio, and a game
