@@ -52,6 +52,17 @@ func Defaults() *Config {
 			ToolChoice:        "tool",
 			PeakTolerance:     dur(5 * time.Second),
 		},
+		YouTube: YouTube{
+			TokenFile:         "/data/youtube_token.json",
+			Privacy:           "public",
+			CategoryID:        "20", // Gaming
+			NotifySubscribers: true,
+			UploadTimeout:     dur(15 * time.Minute),
+			TitleHashtags:     []string{"#GTA6", "#Shorts"},
+			Hashtags:          []string{"#GTA6", "#GTAVI", "#GrandTheftAutoVI", "#Shorts"},
+			Tags: []string{"GTA 6", "GTA VI", "Grand Theft Auto VI", "GTA 6 gameplay", "GTA 6 clips",
+				"GTA 6 momentos engraçados", "GTA 6 Brasil", "Twitch", "clips"},
+		},
 		HTTP:   HTTP{Addr: ":8080", ShutdownTimeout: dur(45 * time.Second)},
 		DBPath: "/data/clipper.db",
 		Detection: Detection{

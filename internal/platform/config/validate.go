@@ -135,6 +135,8 @@ func (c *Config) Validate() error {
 		add("editor.pricing values must be >= 0")
 	}
 
+	errs = append(errs, c.YouTube.validate()...)
+
 	if c.HTTP.Addr == "" {
 		add("http.addr is required")
 	}
@@ -149,6 +151,38 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid configuration:\n%w", err)
 	}
 	return nil
+}
+
+func (y YouTube) validate() []error {
+	var errs []error
+	add := func(format string, args ...any) { errs = append(errs, fmt.Errorf(format, args...)) }
+	if y.TokenFile == "" {
+		add("youtube.token_file is required")
+	}
+	switch y.Privacy {
+	case "public", "unlisted", "private":
+	default:
+		add("youtube.privacy must be public, unlisted or private (got %q)", y.Privacy)
+	}
+	if y.CategoryID == "" || strings.Trim(y.CategoryID, "0123456789") != "" {
+		add("youtube.category_id must be a numeric YouTube category id (got %q)", y.CategoryID)
+	}
+	if y.UploadTimeout <= 0 {
+		add("youtube.upload_timeout must be > 0 (got %s)", y.UploadTimeout.D())
+	}
+	for name, list := range map[string][]string{"youtube.title_hashtags": y.TitleHashtags, "youtube.hashtags": y.Hashtags} {
+		for _, h := range list {
+			if len(h) < 2 || h[0] != '#' || strings.ContainsAny(h, " <>") || strings.Contains(h[1:], "#") {
+				add("%s: %q must be a single #hashtag without spaces", name, h)
+			}
+		}
+	}
+	for _, t := range y.Tags {
+		if strings.TrimSpace(t) == "" || strings.ContainsAny(t, "<>,\"") {
+			add("youtube.tags: %q must be non-empty and have no < > , or quotes", t)
+		}
+	}
+	return errs
 }
 
 func (d Detection) validate() []error {

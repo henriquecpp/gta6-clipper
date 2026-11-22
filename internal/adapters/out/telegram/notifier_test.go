@@ -74,7 +74,7 @@ func TestKeyboardCallbackData(t *testing.T) {
 	}
 	c.State = domain.StateDelivered
 	if len(keyboard(c).InlineKeyboard) != 0 {
-		t.Fatal("final states have no buttons")
+		t.Fatal("the preview of a delivered clip has no buttons")
 	}
 }
 
@@ -190,11 +190,13 @@ func TestSendFinalAndAlert(t *testing.T) {
 	}
 	c := testClip()
 	post := domain.Post{Headline: "Ele pulou!", Text: "Insano #gta6 streamer<x>"}
-	if err := n.SendFinal(context.Background(), c, domain.MediaRef(video), post); err != nil {
-		t.Fatal(err)
+	ref, err := n.SendFinal(context.Background(), c, domain.MediaRef(video), post)
+	if err != nil || ref == "" {
+		t.Fatalf("send final = %q, %v", ref, err)
 	}
 	vids, msgs := srv.Calls("sendVideo"), srv.Calls("sendMessage")
-	if len(vids) != 1 || vids[0].FileBytes != 4096 || !strings.Contains(vids[0].Params["caption"], "Ele pulou!") || vids[0].Params["reply_markup"] != "" {
+	if len(vids) != 1 || vids[0].FileBytes != 4096 || !strings.Contains(vids[0].Params["caption"], "Ele pulou!") ||
+		!strings.Contains(vids[0].Params["caption"], "Nada foi publicado.") || vids[0].Params["reply_markup"] != "" {
 		t.Fatalf("video = %+v", vids)
 	}
 	if len(msgs) != 1 || msgs[0].Params["text"] != post.Text || msgs[0].Params["parse_mode"] != "" {
@@ -207,11 +209,72 @@ func TestSendFinalAndAlert(t *testing.T) {
 		t.Fatalf("alert = %+v", a)
 	}
 	srv.Fail("sendVideo", "Request Entity Too Large")
-	if err := n.SendFinal(context.Background(), c, domain.MediaRef(video), post); err == nil {
+	if _, err := n.SendFinal(context.Background(), c, domain.MediaRef(video), post); err == nil {
 		t.Fatal("expected error")
 	}
 	srv.Fail("sendMessage", "Forbidden")
 	if err := n.SendAlert(context.Background(), c, "x"); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestFinalMessageWithPublishing(t *testing.T) {
+	srv := telegramtest.New()
+	defer srv.Close()
+	n := NewNotifier(newTestBot(t, srv), []int64{111, 222}, time.Hour, slog.New(slog.DiscardHandler), WithPublishing())
+	ctx := context.Background()
+	video := filepath.Join(t.TempDir(), "final.mp4")
+	if err := os.WriteFile(video, make([]byte, 1024), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := testClip()
+	c.State, c.Headline = domain.StateRendered, "Ele pulou!"
+	ref, err := n.SendFinal(ctx, c, domain.MediaRef(video), domain.Post{Headline: c.Headline, Text: "texto"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	vids := srv.Calls("sendVideo")
+	if len(vids) != 2 || !strings.Contains(vids[0].Params["reply_markup"], `"callback_data":"p:`+string(c.ID)+`"`) ||
+		!strings.Contains(vids[0].Params["caption"], "toque em 📤") {
+		t.Fatalf("final video = %+v", vids)
+	}
+	if refs, _ := decodeRefs(ref); len(refs) != 2 {
+		t.Fatalf("refs = %q", ref)
+	}
+	c.FinalMessage = ref
+
+	edit := func(state domain.ClipState) map[string]string {
+		t.Helper()
+		c.State = state
+		before := len(srv.Calls("editMessageCaption"))
+		if err := n.UpdateFinal(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+		edits := srv.Calls("editMessageCaption")
+		if len(edits) != before+2 {
+			t.Fatalf("%s: %d edits", state, len(edits)-before)
+		}
+		return edits[len(edits)-1].Params
+	}
+	if e := edit(domain.StatePublishing); !strings.Contains(e["caption"], "Enviando para o YouTube") ||
+		!strings.Contains(e["reply_markup"], `"inline_keyboard":[]`) {
+		t.Fatalf("publishing edit = %+v", e)
+	}
+	c.PublishError = "quota <exceeded>"
+	if e := edit(domain.StateDelivered); !strings.Contains(e["caption"], "Falha ao publicar: quota &lt;exceeded&gt;") ||
+		!strings.Contains(e["reply_markup"], "p:"+string(c.ID)) {
+		t.Fatalf("failed edit = %+v", e)
+	}
+	c.PublishError, c.PublishedURL = "", "https://www.youtube.com/shorts/abc"
+	if e := edit(domain.StatePublished); !strings.Contains(e["caption"], "Publicado no YouTube: https://www.youtube.com/shorts/abc") ||
+		!strings.Contains(e["reply_markup"], `"url":"https://www.youtube.com/shorts/abc"`) {
+		t.Fatalf("published edit = %+v", e)
+	}
+	if len(CallbackPublish+string(c.ID)) > 64 {
+		t.Fatal("publish callback_data above 64 bytes")
+	}
+	c.FinalMessage = "garbage"
+	if err := n.UpdateFinal(ctx, c); err == nil {
+		t.Fatal("expected error for invalid ref")
 	}
 }

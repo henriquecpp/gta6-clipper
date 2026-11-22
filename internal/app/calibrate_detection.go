@@ -13,7 +13,7 @@ import (
 // decidedStates are the states a clip can be in after a human decision.
 var decidedStates = []domain.ClipState{
 	domain.StateApproved, domain.StateEditing, domain.StateRendered, domain.StateDelivered,
-	domain.StateFailed, domain.StateDiscarded, domain.StateExpired,
+	domain.StatePublishing, domain.StatePublished, domain.StateFailed, domain.StateDiscarded, domain.StateExpired,
 }
 
 // Calibrate loads the past decisions from the repository and sets the

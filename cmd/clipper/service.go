@@ -97,7 +97,8 @@ func runService(_ []string, stderr io.Writer) error {
 	}, render.WithLogger(log))
 	prom.SetNVENC(rend.NVENC())
 
-	tg, err := newTelegram(cfg, log)
+	youtubePublisher, publishing := newPublisher(cfg, log)
+	tg, err := newTelegram(cfg, log, publishing)
 	if err != nil {
 		return err
 	}
@@ -119,7 +120,7 @@ func runService(_ []string, stderr io.Writer) error {
 		whisper.WithWorkers(cfg.Concurrency.TranscribeWorkers), whisper.WithTimeout(cfg.Whisper.Timeout.D())), resilience.WhisperPolicy, rdeps)
 	editor := resilience.NewEditor(newEditor(cfg, log), resilience.EditorPolicy, rdeps)
 	produce := app.NewProduceFinalClip(produceConfig(cfg), repo, transcriber, editor, renderer, notifier, media, clk, log, prom, errLog)
-	queue := app.NewProduceQueue(produce.Execute, max(cfg.Concurrency.TranscribeWorkers, cfg.Concurrency.RenderWorkers), 100,
+	queue := app.NewJobQueue("produce", produce.Execute, max(cfg.Concurrency.TranscribeWorkers, cfg.Concurrency.RenderWorkers), 100,
 		cfg.HTTP.ShutdownTimeout.D(), log, prom)
 	// The approver's decisions calibrate the detection bar of each streamer.
 	if err := detectMoment.Calibrate(ctx); err != nil {
@@ -129,7 +130,14 @@ func runService(_ []string, stderr io.Writer) error {
 		app.WithProducer(func(ctx context.Context, id domain.ClipID) { queue.Submit(ctx, id) }),
 		app.WithDecisionObserver(detectMoment.ObserveDecision))
 	retry := app.NewRetryClip(repo, notifier, clk, log, prom, queue.Submit)
-	recoverPending := app.NewRecoverPending(repo, sendPreview.Execute, queue.Submit, log)
+	// Publication on YouTube: only when the human taps the button; uploads
+	// run one at a time and are never retried blindly (PublishPolicy).
+	publisher := resilience.NewPublisher(youtubePublisher, resilience.PublishPolicy, rdeps)
+	publish := app.NewPublishClip(publishConfig(cfg), repo, publisher, notifier, clk, log, prom, errLog)
+	publishQueue := app.NewJobQueue("publish", publish.Execute, 1, 20, cfg.HTTP.ShutdownTimeout.D(), log, prom)
+	requestPublish := app.NewRequestPublish(repo, notifier, clk, log, prom, publishQueue.Submit)
+	recoverPending := app.NewRecoverPending(repo, sendPreview.Execute, queue.Submit, log,
+		app.WithInterruptedPublications(publish.Interrupted))
 
 	gpu := prom.NewGPUSampler(func(ctx context.Context) ([]byte, error) {
 		return proc.Run(ctx, nil, "nvidia-smi", "--query-gpu=utilization.gpu,memory.used", "--format=csv,noheader,nounits")
@@ -199,6 +207,7 @@ func runService(_ []string, stderr io.Writer) error {
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return srv.Run(gctx) })
 	g.Go(func() error { return queue.Run(gctx) })
+	g.Go(func() error { return publishQueue.Run(gctx) })
 	g.Go(func() error {
 		if _, err := recoverPending.Execute(gctx); err != nil {
 			log.Warn("recover pending clips", logging.Err(err))
@@ -210,7 +219,11 @@ func runService(_ []string, stderr io.Writer) error {
 		g.Go(func() error { return supervisor.Run(gctx) })
 	}
 	if tg.bot != nil {
-		bot := telegrambot.New(tg.bot, cfg.Secrets.TelegramAllowedChatIDs, decisions, status, log, telegrambot.WithRetry(retry.Execute))
+		botOpts := []telegrambot.Option{telegrambot.WithRetry(retry.Execute)}
+		if publishing {
+			botOpts = append(botOpts, telegrambot.WithPublish(requestPublish.Execute))
+		}
+		bot := telegrambot.New(tg.bot, cfg.Secrets.TelegramAllowedChatIDs, decisions, status, log, botOpts...)
 		g.Go(func() error { return bot.Run(gctx) })
 	}
 	srv.SetReady(true)
@@ -260,6 +273,35 @@ func backup(args []string, stdout io.Writer) error {
 		return err
 	}
 	_, _ = fmt.Fprintf(stdout, "backup written to %s\n", args[0])
+	return nil
+}
+
+// youtubeAuth authorizes the YouTube channel once (OAuth for limited-input
+// devices) and shows which channel the videos will be published to.
+func youtubeAuth(_ []string, stdout io.Writer) error {
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	if !cfg.Secrets.HasYouTube() {
+		return errors.New("YOUTUBE_CLIENT_ID / YOUTUBE_CLIENT_SECRET are not set (.env)")
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	yt := newYouTube(cfg, slog.New(slog.DiscardHandler))
+	err = yt.DeviceFlow(ctx, func(verificationURL, code string) {
+		_, _ = fmt.Fprintf(stdout, "Abra %s e digite o código: %s\nEscolha a conta/canal onde os Shorts serão publicados. Aguardando...\n",
+			verificationURL, code)
+	})
+	if err != nil {
+		return err
+	}
+	title, id, err := yt.Channel(ctx)
+	if err != nil {
+		return fmt.Errorf("authorized, but the channel could not be read: %w", err)
+	}
+	_, _ = fmt.Fprintf(stdout, "Canal autorizado: %s (%s)\nToken salvo em %s. Reinicie o app (task up) para mostrar o botão de publicar.\n",
+		title, id, cfg.YouTube.TokenFile)
 	return nil
 }
 

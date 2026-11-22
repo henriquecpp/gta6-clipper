@@ -191,7 +191,7 @@ func TestPipelineEndToEnd(t *testing.T) {
 	}, repo, whisper.NewTranscriber(whisper.NewClient(whisperSrv.URL, nil)),
 		claude.New(claude.Config{APIKey: "sk-test", Model: "claude-haiku-5-5", MaxTokens: 2000, Timeout: 30 * time.Second}, option.WithBaseURL(claudeSrv.URL)),
 		rend, notifier, capt, clk, log, nil, errLog)
-	queue := app.NewProduceQueue(produce.Execute, 1, 10, 30*time.Second, log, nil)
+	queue := app.NewJobQueue("produce", produce.Execute, 1, 10, 30*time.Second, log, nil)
 	decisions := app.NewDecisions(repo, capt, notifier, clk, log, time.Hour,
 		app.WithProducer(func(ctx context.Context, id domain.ClipID) { queue.Submit(ctx, id) }))
 	status := app.NewStatus(repo, clk, time.Hour, nil, queue.Depth, errLog)

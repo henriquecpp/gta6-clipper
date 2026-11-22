@@ -70,6 +70,9 @@ func TestTransitionTable(t *testing.T) {
 		{StateEditing, StateFailed}:        true,
 		{StateRendered, StateFailed}:       true,
 		{StateFailed, StateApproved}:       true,
+		{StateDelivered, StatePublishing}:  true,
+		{StatePublishing, StatePublished}:  true,
+		{StatePublishing, StateDelivered}:  true,
 	}
 	for _, from := range ClipStates {
 		for _, to := range ClipStates {
@@ -99,7 +102,7 @@ func TestTransitionTable(t *testing.T) {
 
 func TestFinalStates(t *testing.T) {
 	for _, s := range ClipStates {
-		final := s == StateDiscarded || s == StateExpired || s == StateDelivered
+		final := s == StateDiscarded || s == StateExpired || s == StatePublished
 		if s.Final() != final {
 			t.Errorf("%s.Final() = %v", s, s.Final())
 		}
@@ -129,8 +132,8 @@ func TestHappyPathRecordsDecisionAndTimes(t *testing.T) {
 	if !c.UpdatedAt.Equal(t0.Add(5 * time.Minute)) {
 		t.Errorf("updated at %v", c.UpdatedAt)
 	}
-	if !c.State.Final() {
-		t.Error("delivered should be final")
+	if c.State.Final() {
+		t.Error("delivered can still be published")
 	}
 	// Duplicate approval is rejected (idempotency is enforced by callers via InTx).
 	if err := c.Transition(StateApproved, t0); !errors.Is(err, ErrInvalidTransition) {
@@ -207,5 +210,42 @@ func TestCloneIsDeep(t *testing.T) {
 	var nilClip *Clip
 	if nilClip.Clone() != nil {
 		t.Fatal("nil clone")
+	}
+}
+
+func TestPublication(t *testing.T) {
+	c := newTestClip(t)
+	for i, s := range []ClipState{StatePreviewSent, StateApproved, StateEditing, StateRendered, StateDelivered, StatePublishing} {
+		if err := c.Transition(s, t0.Add(time.Duration(i+1)*time.Minute)); err != nil {
+			t.Fatalf("→ %s: %v", s, err)
+		}
+	}
+	// A failed upload goes back to delivered with the reason.
+	if err := c.PublishFailed("  quota exceeded ", t0.Add(7*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if c.State != StateDelivered || c.PublishError != "quota exceeded" {
+		t.Fatalf("after failure: %s %q", c.State, c.PublishError)
+	}
+	if err := c.PublishFailed("again", t0); !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("PublishFailed outside publishing: %v", err)
+	}
+	if err := c.Transition(StatePublishing, t0.Add(8*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.MarkPublished(Publication{}, t0); !errors.Is(err, ErrInvalidArgument) || c.State != StatePublishing {
+		t.Fatalf("publication without id: %v (%s)", err, c.State)
+	}
+	if err := c.MarkPublished(Publication{ID: "abc123", URL: "https://www.youtube.com/shorts/abc123"}, t0.Add(9*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if c.State != StatePublished || c.PublishedID != "abc123" || c.PublishError != "" || !c.State.Final() {
+		t.Fatalf("published: %+v", c)
+	}
+	if err := c.Transition(StatePublishing, t0); !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("publishing twice: %v", err)
+	}
+	if err := c.PublishFailed("x", t0); !errors.Is(err, ErrInvalidTransition) {
+		t.Fatal("PublishFailed after published must fail")
 	}
 }

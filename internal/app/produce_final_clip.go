@@ -266,16 +266,18 @@ func (u *ProduceFinalClip) saveUsage(ctx context.Context, id domain.ClipID, usag
 func (u *ProduceFinalClip) deliver(ctx context.Context, c *domain.Clip, log *slog.Logger) error {
 	t0 := u.clock.Now()
 	post := domain.Post{Headline: c.Headline, Text: c.PostText}
-	if err := u.notifier.SendFinal(ctx, c, c.FinalMedia, post); err != nil {
+	msg, err := u.notifier.SendFinal(ctx, c, c.FinalMedia, post)
+	if err != nil {
 		return fmt.Errorf("deliver final video: %w", err)
 	}
 	u.metrics.StageDuration("deliver", u.clock.Now().Sub(t0))
 	var out *domain.Clip
-	err := u.repo.InTx(ctx, func(ctx context.Context, repo ClipRepository) error {
+	err = u.repo.InTx(ctx, func(ctx context.Context, repo ClipRepository) error {
 		cur, err := repo.Get(ctx, c.ID)
 		if err != nil {
 			return err
 		}
+		cur.FinalMessage = msg
 		if err := cur.Transition(domain.StateDelivered, u.clock.Now()); err != nil {
 			return err
 		}

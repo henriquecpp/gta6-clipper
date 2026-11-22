@@ -87,8 +87,18 @@ type Notifier interface {
 	UpdatePreview(ctx context.Context, c *domain.Clip) error
 	// SendFailure alerts about a failed clip.
 	SendFailure(ctx context.Context, c *domain.Clip, reason string) error
-	// SendFinal delivers the final video and the suggested post text.
-	SendFinal(ctx context.Context, c *domain.Clip, video domain.MediaRef, post domain.Post) error
+	// SendFinal delivers the final video and the suggested post text and
+	// returns a reference to the video message(s), edited by UpdateFinal.
+	SendFinal(ctx context.Context, c *domain.Clip, video domain.MediaRef, post domain.Post) (domain.MessageRef, error)
+	// UpdateFinal edits the final video message(s) to reflect the publication.
+	UpdateFinal(ctx context.Context, c *domain.Clip) error
 	// SendAlert sends an informational alert about a clip (e.g. cost above the limit).
 	SendAlert(ctx context.Context, c *domain.Clip, text string) error
+}
+
+// Publisher uploads a delivered video to the channel (YouTube Shorts). It runs
+// only after the human asks for it. An upload is not idempotent, so callers
+// must not retry a failed call blindly (it could publish the video twice).
+type Publisher interface {
+	Publish(ctx context.Context, video domain.MediaRef, meta domain.UploadMeta) (domain.Publication, error)
 }

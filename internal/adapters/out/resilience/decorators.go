@@ -14,6 +14,10 @@ var (
 	WhisperPolicy = Policy{Attempts: 3, Base: 2 * time.Second, Max: 20 * time.Second, Jitter: 0.2}
 	EditorPolicy  = Policy{Attempts: 3, Base: 2 * time.Second, Max: 30 * time.Second, Jitter: 0.2}
 	FFmpegPolicy  = Policy{Attempts: 2, Base: time.Second, Max: time.Second, Jitter: 0.2}
+	// PublishPolicy never retries: an upload is not idempotent (a blind retry
+	// could publish the video twice). The YouTube adapter resumes an
+	// interrupted upload itself, and the human can ask again.
+	PublishPolicy = Policy{Attempts: 1}
 )
 
 // Platform decorates app.Platform.
@@ -178,8 +182,15 @@ func (d *Notifier) SendFailure(ctx context.Context, c *domain.Clip, reason strin
 }
 
 // SendFinal implements app.Notifier.
-func (d *Notifier) SendFinal(ctx context.Context, c *domain.Clip, video domain.MediaRef, post domain.Post) error {
-	return call0(ctx, d.deps, d.Policy, "notifier", "send_final", func(ctx context.Context) error { return d.Next.SendFinal(ctx, c, video, post) })
+func (d *Notifier) SendFinal(ctx context.Context, c *domain.Clip, video domain.MediaRef, post domain.Post) (domain.MessageRef, error) {
+	return call(ctx, d.deps, d.Policy, "notifier", "send_final", func(ctx context.Context) (domain.MessageRef, error) {
+		return d.Next.SendFinal(ctx, c, video, post)
+	})
+}
+
+// UpdateFinal implements app.Notifier.
+func (d *Notifier) UpdateFinal(ctx context.Context, c *domain.Clip) error {
+	return call0(ctx, d.deps, d.Policy, "notifier", "update_final", func(ctx context.Context) error { return d.Next.UpdateFinal(ctx, c) })
 }
 
 // SendAlert implements app.Notifier.
@@ -187,7 +198,27 @@ func (d *Notifier) SendAlert(ctx context.Context, c *domain.Clip, text string) e
 	return call0(ctx, d.deps, d.Policy, "notifier", "send_alert", func(ctx context.Context) error { return d.Next.SendAlert(ctx, c, text) })
 }
 
+// Publisher decorates app.Publisher (use PublishPolicy: no retries).
+type Publisher struct {
+	Next   app.Publisher
+	Policy Policy
+	deps   Deps
+}
+
+// NewPublisher wraps p.
+func NewPublisher(p app.Publisher, policy Policy, deps Deps) *Publisher {
+	return &Publisher{Next: p, Policy: policy, deps: deps.withDefaults()}
+}
+
+// Publish implements app.Publisher.
+func (d *Publisher) Publish(ctx context.Context, video domain.MediaRef, meta domain.UploadMeta) (domain.Publication, error) {
+	return call(ctx, d.deps, d.Policy, "publisher", "publish", func(ctx context.Context) (domain.Publication, error) {
+		return d.Next.Publish(ctx, video, meta)
+	})
+}
+
 var (
+	_ app.Publisher    = (*Publisher)(nil)
 	_ app.Platform     = (*Platform)(nil)
 	_ app.MediaCapture = (*MediaCapture)(nil)
 	_ app.Renderer     = (*Renderer)(nil)

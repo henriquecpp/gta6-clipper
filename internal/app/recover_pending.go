@@ -10,19 +10,34 @@ import (
 )
 
 // RecoverPending resumes the work interrupted by a restart: previews of
-// clips still in `detected` are sent again and clips in approved, editing or
-// rendered go back to the production queue.
+// clips still in `detected` are sent again, clips in approved, editing or
+// rendered go back to the production queue and interrupted publications are
+// handed to the publication use case (which never re-uploads on its own).
 type RecoverPending struct {
-	repo    ClipRepository
-	preview func(ctx context.Context, id domain.ClipID) error
-	submit  func(ctx context.Context, id domain.ClipID) bool
-	log     *slog.Logger
+	repo        ClipRepository
+	preview     func(ctx context.Context, id domain.ClipID) error
+	submit      func(ctx context.Context, id domain.ClipID) bool
+	interrupted func(ctx context.Context, id domain.ClipID) error
+	log         *slog.Logger
+}
+
+// RecoverOption configures RecoverPending.
+type RecoverOption func(*RecoverPending)
+
+// WithInterruptedPublications sets what happens to clips left in publishing
+// (PublishClip.Interrupted).
+func WithInterruptedPublications(f func(ctx context.Context, id domain.ClipID) error) RecoverOption {
+	return func(r *RecoverPending) { r.interrupted = f }
 }
 
 // NewRecoverPending builds the use case.
 func NewRecoverPending(repo ClipRepository, preview func(ctx context.Context, id domain.ClipID) error,
-	submit func(ctx context.Context, id domain.ClipID) bool, log *slog.Logger) *RecoverPending {
-	return &RecoverPending{repo: repo, preview: preview, submit: submit, log: log}
+	submit func(ctx context.Context, id domain.ClipID) bool, log *slog.Logger, opts ...RecoverOption) *RecoverPending {
+	r := &RecoverPending{repo: repo, preview: preview, submit: submit, log: log}
+	for _, o := range opts {
+		o(r)
+	}
+	return r
 }
 
 // Execute runs the recovery once; it returns how many clips were resumed.
@@ -46,6 +61,19 @@ func (r *RecoverPending) Execute(ctx context.Context) (int, error) {
 	}
 	for _, c := range inProgress {
 		if r.submit(ctx, c.ID) {
+			resumed++
+		}
+	}
+	if r.interrupted != nil {
+		publishing, err := r.repo.ListByState(ctx, domain.StatePublishing)
+		if err != nil {
+			return resumed, fmt.Errorf("recover: %w", err)
+		}
+		for _, c := range publishing {
+			if err := r.interrupted(ctx, c.ID); err != nil {
+				errs = append(errs, fmt.Errorf("interrupted publication of %s: %w", c.ID, err))
+				continue
+			}
 			resumed++
 		}
 	}

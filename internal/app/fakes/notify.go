@@ -66,6 +66,8 @@ type Notifier struct {
 	Failures  []string
 	Finals    []domain.Post
 	Alerts    []string
+	// FinalUpdates records the clip states shown on the final message.
+	FinalUpdates []domain.ClipState
 }
 
 var _ app.Notifier = (*Notifier)(nil)
@@ -101,17 +103,71 @@ func (n *Notifier) SendFailure(_ context.Context, c *domain.Clip, reason string)
 }
 
 // SendFinal records the delivery.
-func (n *Notifier) SendFinal(ctx context.Context, _ *domain.Clip, _ domain.MediaRef, post domain.Post) error {
+func (n *Notifier) SendFinal(ctx context.Context, _ *domain.Clip, _ domain.MediaRef, post domain.Post) (domain.MessageRef, error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return "", err
 	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if n.FinalErr != nil {
-		return n.FinalErr
+		return "", n.FinalErr
 	}
 	n.Finals = append(n.Finals, post)
-	return nil
+	return domain.MessageRef(fmt.Sprintf("1:%d", 1000+len(n.Finals))), nil
+}
+
+// UpdateFinal records the state shown on the final message.
+func (n *Notifier) UpdateFinal(_ context.Context, c *domain.Clip) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.FinalUpdates = append(n.FinalUpdates, c.State)
+	return n.UpdateErr
+}
+
+// FinalStates returns a copy of the states shown on the final message.
+func (n *Notifier) FinalStates() []domain.ClipState {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return append([]domain.ClipState(nil), n.FinalUpdates...)
+}
+
+// Publisher records uploads (YouTube).
+type Publisher struct {
+	mu      sync.Mutex
+	Err     error
+	Uploads []domain.UploadMeta
+	Videos  []domain.MediaRef
+	// Block, when set, is waited on before answering (tests of in-flight state).
+	Block chan struct{}
+}
+
+var _ app.Publisher = (*Publisher)(nil)
+
+// Publish records the upload and returns a fake video id.
+func (p *Publisher) Publish(ctx context.Context, video domain.MediaRef, meta domain.UploadMeta) (domain.Publication, error) {
+	if p.Block != nil {
+		select {
+		case <-p.Block:
+		case <-ctx.Done():
+			return domain.Publication{}, ctx.Err()
+		}
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.Err != nil {
+		return domain.Publication{}, p.Err
+	}
+	p.Uploads = append(p.Uploads, meta)
+	p.Videos = append(p.Videos, video)
+	id := fmt.Sprintf("yt%03d", len(p.Uploads))
+	return domain.Publication{ID: id, URL: "https://www.youtube.com/shorts/" + id}, nil
+}
+
+// Count returns how many uploads succeeded.
+func (p *Publisher) Count() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.Uploads)
 }
 
 // SendAlert records the alert.

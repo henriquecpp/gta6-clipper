@@ -22,8 +22,9 @@ type telegramParts struct {
 }
 
 // newTelegram builds the shared bot, or a disabled notifier (degraded mode,
-// ADR 0016) when the token or the chat allowlist is missing.
-func newTelegram(cfg *config.Config, log *slog.Logger) (telegramParts, error) {
+// ADR 0016) when the token or the chat allowlist is missing. publish shows the
+// "publish on YouTube" button on final videos.
+func newTelegram(cfg *config.Config, log *slog.Logger, publish bool) (telegramParts, error) {
 	if !cfg.Secrets.HasTelegram() {
 		log.Warn("TELEGRAM_BOT_TOKEN/TELEGRAM_ALLOWED_CHAT_IDS missing: previews cannot be delivered (degraded mode)")
 		return telegramParts{notifier: disabledNotifier{}}, nil
@@ -33,9 +34,13 @@ func newTelegram(cfg *config.Config, log *slog.Logger) (telegramParts, error) {
 	if err != nil {
 		return telegramParts{}, fmt.Errorf("telegram bot: %w", errors.New(strings.ReplaceAll(err.Error(), token, "<redacted>")))
 	}
+	var opts []telegram.Option
+	if publish {
+		opts = append(opts, telegram.WithPublishing())
+	}
 	return telegramParts{
 		bot:      bot,
-		notifier: telegram.NewNotifier(bot, cfg.Secrets.TelegramAllowedChatIDs, cfg.Approval.TTL.D(), log),
+		notifier: telegram.NewNotifier(bot, cfg.Secrets.TelegramAllowedChatIDs, cfg.Approval.TTL.D(), log, opts...),
 	}, nil
 }
 
@@ -70,7 +75,8 @@ func (disabledNotifier) SendPreview(context.Context, *domain.Clip, domain.MediaR
 }
 func (disabledNotifier) UpdatePreview(context.Context, *domain.Clip) error       { return nil }
 func (disabledNotifier) SendFailure(context.Context, *domain.Clip, string) error { return nil }
-func (disabledNotifier) SendFinal(context.Context, *domain.Clip, domain.MediaRef, domain.Post) error {
-	return errTelegramDisabled
+func (disabledNotifier) SendFinal(context.Context, *domain.Clip, domain.MediaRef, domain.Post) (domain.MessageRef, error) {
+	return "", errTelegramDisabled
 }
+func (disabledNotifier) UpdateFinal(context.Context, *domain.Clip) error       { return nil }
 func (disabledNotifier) SendAlert(context.Context, *domain.Clip, string) error { return nil }

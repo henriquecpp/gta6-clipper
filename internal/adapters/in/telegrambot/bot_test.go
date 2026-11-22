@@ -189,6 +189,23 @@ func TestHelpers(t *testing.T) {
 	if e.bot.dispatch(context.Background(), "r:x") != "Retentativa indisponível" || e.bot.dispatch(context.Background(), "a:") != "Ação inválida" {
 		t.Fatal("dispatch edge cases")
 	}
+	if got := e.bot.dispatch(context.Background(), "p:x"); got != "Publicação no YouTube não configurada" {
+		t.Fatalf("publish without YouTube = %q", got)
+	}
+	var published []domain.ClipID
+	e.bot.publish = func(_ context.Context, id domain.ClipID) error {
+		published = append(published, id)
+		if len(published) > 1 {
+			return fmt.Errorf("request publication of %s: %w", id, domain.ErrInvalidTransition)
+		}
+		return nil
+	}
+	if got := e.bot.dispatch(context.Background(), "p:c1"); got != "⏫ Publicando no YouTube…" {
+		t.Fatalf("publish = %q", got)
+	}
+	if got := e.bot.dispatch(context.Background(), "p:c1"); got != "Já processado" || len(published) != 2 || published[0] != "c1" {
+		t.Fatalf("duplicate publish = %q (%v)", got, published)
+	}
 	if !strings.Contains(e.bot.pendingText(context.Background()), "Nenhum clipe") {
 		t.Fatal("empty pending")
 	}

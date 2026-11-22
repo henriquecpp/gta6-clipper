@@ -23,6 +23,10 @@ import (
 // RetryFunc reprocesses a failed clip (/retry and the retry button).
 type RetryFunc func(ctx context.Context, id domain.ClipID) error
 
+// PublishFunc requests the publication of a delivered clip (button on the
+// final video).
+type PublishFunc func(ctx context.Context, id domain.ClipID) error
+
 // Bot handles updates.
 type Bot struct {
 	bot     *telego.Bot
@@ -30,6 +34,7 @@ type Bot struct {
 	dec     *app.Decisions
 	status  *app.Status
 	retry   RetryFunc
+	publish PublishFunc
 	log     *slog.Logger
 	now     func() time.Time
 }
@@ -39,6 +44,9 @@ type Option func(*Bot)
 
 // WithRetry enables /retry and the retry button.
 func WithRetry(f RetryFunc) Option { return func(b *Bot) { b.retry = f } }
+
+// WithPublish enables the "publish on YouTube" button.
+func WithPublish(f PublishFunc) Option { return func(b *Bot) { b.publish = f } }
 
 // New builds the bot adapter.
 func New(bot *telego.Bot, allowed []int64, dec *app.Decisions, status *app.Status, log *slog.Logger, opts ...Option) *Bot {
@@ -111,6 +119,11 @@ func (b *Bot) dispatch(ctx context.Context, data string) string {
 			return "Retentativa indisponível"
 		}
 		err, done = b.retry(ctx, id), "🔁 Reprocessando…"
+	case "p":
+		if b.publish == nil {
+			return "Publicação no YouTube não configurada"
+		}
+		err, done = b.publish(ctx, id), "⏫ Publicando no YouTube…"
 	default:
 		return "Ação inválida"
 	}

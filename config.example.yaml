@@ -66,6 +66,17 @@ editor:
     cache_write: 0
     cache_read: 0
 
+youtube:                    # publication as Shorts, only when you tap "Publicar no YouTube" (README)
+  privacy: public           # public | unlisted | private
+  category_id: "20"         # Gaming
+  notify_subscribers: true
+  made_for_kids: false
+  upload_timeout: 15m
+  token_file: /data/youtube_token.json
+  title_hashtags: ["#GTA6", "#Shorts"]                         # appended to the headline while it fits (100 chars)
+  hashtags: ["#GTA6", "#GTAVI", "#GrandTheftAutoVI", "#Shorts"] # added to the description if the post text lacks them
+  tags: ["GTA 6", "GTA VI", "Grand Theft Auto VI", "GTA 6 gameplay", "GTA 6 clips", "GTA 6 momentos engraçados", "GTA 6 Brasil", "Twitch", "clips"]
+
 http:
   addr: ":8080"
   shutdown_timeout: 45s

@@ -111,6 +111,12 @@ func (r *Repo) save(ctx context.Context, c *domain.Clip) error {
 		PeakAt:           nullTime(c.PeakAt),
 		LiveOffsetMs:     c.LiveOffset.Milliseconds(),
 		EditPlan:         plan,
+		FinalMessage:     string(c.FinalMessage),
+		PublishedID:      c.PublishedID,
+		PublishedUrl:     c.PublishedURL,
+		PublishError:     c.PublishError,
+		PublishingAt:     st(domain.StatePublishing),
+		PublishedAt:      st(domain.StatePublished),
 	}
 	if err := r.q.UpsertClip(ctx, p); err != nil {
 		return fmt.Errorf("upsert clip %s: %w", c.ID, err)
@@ -254,6 +260,10 @@ func toDomain(row sqlcgen.Clip) (*domain.Clip, error) {
 		PreviewMedia:   domain.MediaRef(row.PreviewMedia),
 		FinalMedia:     domain.MediaRef(row.FinalMedia),
 		PreviewMessage: domain.MessageRef(row.PreviewMessage),
+		FinalMessage:   domain.MessageRef(row.FinalMessage),
+		PublishedID:    row.PublishedID,
+		PublishedURL:   row.PublishedUrl,
+		PublishError:   row.PublishError,
 		Headline:       row.Headline,
 		PostText:       row.PostText,
 		Usage: domain.Usage{
@@ -300,6 +310,8 @@ func toDomain(row sqlcgen.Clip) (*domain.Clip, error) {
 		domain.StateEditing:     row.EditingAt,
 		domain.StateRendered:    row.RenderedAt,
 		domain.StateDelivered:   row.DeliveredAt,
+		domain.StatePublishing:  row.PublishingAt,
+		domain.StatePublished:   row.PublishedAt,
 		domain.StateFailed:      row.FailedAt,
 	}
 	for s, v := range stateCols {

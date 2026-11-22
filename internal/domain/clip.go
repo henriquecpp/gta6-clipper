@@ -30,13 +30,15 @@ const (
 	StateEditing     ClipState = "editing"
 	StateRendered    ClipState = "rendered"
 	StateDelivered   ClipState = "delivered"
+	StatePublishing  ClipState = "publishing"
+	StatePublished   ClipState = "published"
 	StateFailed      ClipState = "failed"
 )
 
 // ClipStates lists every state in lifecycle order.
 var ClipStates = []ClipState{
 	StateDetected, StatePreviewSent, StateApproved, StateDiscarded, StateExpired,
-	StateEditing, StateRendered, StateDelivered, StateFailed,
+	StateEditing, StateRendered, StateDelivered, StatePublishing, StatePublished, StateFailed,
 }
 
 // transitions is the state machine table (CLAUDE.md §5).
@@ -46,7 +48,11 @@ var transitions = map[ClipState][]ClipState{
 	StateApproved:    {StateEditing},
 	StateEditing:     {StateRendered, StateFailed},
 	StateRendered:    {StateDelivered, StateFailed},
-	StateFailed:      {StateApproved},
+	// Publication is requested by the human (button on the final video); a
+	// failed upload goes back to delivered so it can be requested again.
+	StateDelivered:  {StatePublishing},
+	StatePublishing: {StatePublished, StateDelivered},
+	StateFailed:     {StateApproved},
 }
 
 // Valid reports whether s is a known state.
@@ -54,7 +60,7 @@ func (s ClipState) Valid() bool { return slices.Contains(ClipStates, s) }
 
 // Final reports whether no transition leaves s.
 func (s ClipState) Final() bool {
-	return s == StateDiscarded || s == StateExpired || s == StateDelivered
+	return s == StateDiscarded || s == StateExpired || s == StatePublished
 }
 
 // CanTransition reports whether the table allows from → to.
@@ -94,6 +100,15 @@ type Clip struct {
 	PreviewMedia   MediaRef
 	FinalMedia     MediaRef
 	PreviewMessage MessageRef
+	// FinalMessage is the message(s) with the final video, edited as the
+	// publication progresses.
+	FinalMessage MessageRef
+
+	// PublishedID and PublishedURL locate the published video (empty until
+	// published); PublishError is why the last attempt failed.
+	PublishedID  string
+	PublishedURL string
+	PublishError string
 
 	Headline string
 	PostText string
@@ -202,6 +217,35 @@ func (c *Clip) Fail(reason string, at time.Time) error {
 	c.FailedFrom = c.State
 	c.FailureReason = reason
 	c.set(StateFailed, at.UTC())
+	return nil
+}
+
+// MarkPublished records where the video was published and moves
+// publishing → published.
+func (c *Clip) MarkPublished(p Publication, at time.Time) error {
+	if strings.TrimSpace(p.ID) == "" {
+		return fmt.Errorf("%w: publication of clip %s has no id", ErrInvalidArgument, c.ID)
+	}
+	if err := c.Transition(StatePublished, at); err != nil {
+		return err
+	}
+	c.PublishedID, c.PublishedURL, c.PublishError = p.ID, p.URL, ""
+	return nil
+}
+
+// PublishFailed moves publishing → delivered keeping the reason, so the
+// publication can be requested again.
+func (c *Clip) PublishFailed(reason string, at time.Time) error {
+	if c.State != StatePublishing {
+		return fmt.Errorf("%w: %s is not publishing (clip %s)", ErrInvalidTransition, c.State, c.ID)
+	}
+	if err := c.Transition(StateDelivered, at); err != nil {
+		return err
+	}
+	c.PublishError = strings.TrimSpace(reason)
+	if c.PublishError == "" {
+		c.PublishError = "unknown error"
+	}
 	return nil
 }
 

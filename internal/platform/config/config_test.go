@@ -115,6 +115,13 @@ func TestValidationErrors(t *testing.T) {
 		"voice frame":      "detection: {voice: {frame: 1s, window: 2s}}",
 		"pricing":          "editor: {pricing: {input: -1}}",
 		"max tokens":       "editor: {max_tokens: 10}",
+		"yt privacy":       "youtube: {privacy: friends}",
+		"yt category":      "youtube: {category_id: gaming}",
+		"yt hashtag":       "youtube: {hashtags: [GTA6]}",
+		"yt title tag":     "youtube: {title_hashtags: ['#GTA 6']}",
+		"yt tag comma":     "youtube: {tags: ['GTA, 6']}",
+		"yt timeout":       "youtube: {upload_timeout: 0s}",
+		"yt token file":    "youtube: {token_file: ''}",
 	}
 	for name, yml := range cases {
 		if _, err := Parse([]byte(yml), env(nil)); err == nil {
@@ -177,5 +184,24 @@ func TestPreviewWidthFollowsTheFinalAspect(t *testing.T) {
 	}
 	if w := (Render{PreviewHeight: 854}).PreviewWidth(); w != 0 {
 		t.Fatalf("no final size: width = %d, want 0", w)
+	}
+}
+
+func TestYouTubeDefaultsAndSecrets(t *testing.T) {
+	cfg, err := Parse(nil, env(map[string]string{"YOUTUBE_CLIENT_ID": " cid ", "YOUTUBE_CLIENT_SECRET": "sec"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	y := cfg.YouTube
+	if !cfg.Secrets.HasYouTube() || cfg.Secrets.YouTubeClientID != "cid" || y.Privacy != "public" || y.CategoryID != "20" ||
+		!y.NotifySubscribers || y.MadeForKids || y.TokenFile != "/data/youtube_token.json" || len(y.Tags) == 0 || y.TitleHashtags[0] != "#GTA6" {
+		t.Fatalf("youtube = %+v", y)
+	}
+	cfg, err = Parse([]byte("youtube: {privacy: unlisted, notify_subscribers: false, tags: ['GTA 6 Online']}"), env(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Secrets.HasYouTube() || cfg.YouTube.Privacy != "unlisted" || cfg.YouTube.NotifySubscribers || len(cfg.YouTube.Tags) != 1 {
+		t.Fatalf("youtube = %+v", cfg.YouTube)
 	}
 }

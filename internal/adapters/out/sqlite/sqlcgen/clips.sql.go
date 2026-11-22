@@ -12,7 +12,7 @@ import (
 )
 
 const getClip = `-- name: GetClip :one
-SELECT id, streamer, stream_id, game, stream_title, state, peak_ms, window_from_ms, window_to_ms, score, signals, source_media, preview_media, final_media, preview_message, headline, post_text, micro_usd, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens, failure_reason, failed_from, decision, decided_at, created_at, updated_at, detected_at, preview_sent_at, approved_at, discarded_at, expired_at, editing_at, rendered_at, delivered_at, failed_at, peak_at, live_offset_ms, edit_plan FROM clips WHERE id = ?
+SELECT id, streamer, stream_id, game, stream_title, state, peak_ms, window_from_ms, window_to_ms, score, signals, source_media, preview_media, final_media, preview_message, headline, post_text, micro_usd, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens, failure_reason, failed_from, decision, decided_at, created_at, updated_at, detected_at, preview_sent_at, approved_at, discarded_at, expired_at, editing_at, rendered_at, delivered_at, failed_at, peak_at, live_offset_ms, edit_plan, final_message, published_id, published_url, publish_error, publishing_at, published_at FROM clips WHERE id = ?
 `
 
 func (q *Queries) GetClip(ctx context.Context, id string) (Clip, error) {
@@ -59,12 +59,18 @@ func (q *Queries) GetClip(ctx context.Context, id string) (Clip, error) {
 		&i.PeakAt,
 		&i.LiveOffsetMs,
 		&i.EditPlan,
+		&i.FinalMessage,
+		&i.PublishedID,
+		&i.PublishedUrl,
+		&i.PublishError,
+		&i.PublishingAt,
+		&i.PublishedAt,
 	)
 	return i, err
 }
 
 const listClipsByState = `-- name: ListClipsByState :many
-SELECT id, streamer, stream_id, game, stream_title, state, peak_ms, window_from_ms, window_to_ms, score, signals, source_media, preview_media, final_media, preview_message, headline, post_text, micro_usd, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens, failure_reason, failed_from, decision, decided_at, created_at, updated_at, detected_at, preview_sent_at, approved_at, discarded_at, expired_at, editing_at, rendered_at, delivered_at, failed_at, peak_at, live_offset_ms, edit_plan FROM clips
+SELECT id, streamer, stream_id, game, stream_title, state, peak_ms, window_from_ms, window_to_ms, score, signals, source_media, preview_media, final_media, preview_message, headline, post_text, micro_usd, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens, failure_reason, failed_from, decision, decided_at, created_at, updated_at, detected_at, preview_sent_at, approved_at, discarded_at, expired_at, editing_at, rendered_at, delivered_at, failed_at, peak_at, live_offset_ms, edit_plan, final_message, published_id, published_url, publish_error, publishing_at, published_at FROM clips
 WHERE state IN (/*SLICE:states*/?)
 ORDER BY created_at, id
 `
@@ -129,6 +135,12 @@ func (q *Queries) ListClipsByState(ctx context.Context, states []string) ([]Clip
 			&i.PeakAt,
 			&i.LiveOffsetMs,
 			&i.EditPlan,
+			&i.FinalMessage,
+			&i.PublishedID,
+			&i.PublishedUrl,
+			&i.PublishError,
+			&i.PublishingAt,
+			&i.PublishedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -154,7 +166,8 @@ INSERT INTO clips (
     created_at, updated_at,
     detected_at, preview_sent_at, approved_at, discarded_at, expired_at,
     editing_at, rendered_at, delivered_at, failed_at,
-    peak_at, live_offset_ms, edit_plan
+    peak_at, live_offset_ms, edit_plan,
+    final_message, published_id, published_url, publish_error, publishing_at, published_at
 ) VALUES (
     ?, ?, ?, ?, ?, ?,
     ?, ?, ?, ?, ?,
@@ -165,7 +178,8 @@ INSERT INTO clips (
     ?, ?,
     ?, ?, ?, ?, ?,
     ?, ?, ?, ?,
-    ?, ?, ?
+    ?, ?, ?,
+    ?, ?, ?, ?, ?, ?
 )
 ON CONFLICT (id) DO UPDATE SET
     streamer           = excluded.streamer,
@@ -206,7 +220,13 @@ ON CONFLICT (id) DO UPDATE SET
     failed_at          = excluded.failed_at,
     peak_at            = excluded.peak_at,
     live_offset_ms     = excluded.live_offset_ms,
-    edit_plan          = excluded.edit_plan
+    edit_plan          = excluded.edit_plan,
+    final_message      = excluded.final_message,
+    published_id       = excluded.published_id,
+    published_url      = excluded.published_url,
+    publish_error      = excluded.publish_error,
+    publishing_at      = excluded.publishing_at,
+    published_at       = excluded.published_at
 `
 
 type UpsertClipParams struct {
@@ -250,6 +270,12 @@ type UpsertClipParams struct {
 	PeakAt           sql.NullString
 	LiveOffsetMs     int64
 	EditPlan         string
+	FinalMessage     string
+	PublishedID      string
+	PublishedUrl     string
+	PublishError     string
+	PublishingAt     sql.NullString
+	PublishedAt      sql.NullString
 }
 
 func (q *Queries) UpsertClip(ctx context.Context, arg UpsertClipParams) error {
@@ -294,6 +320,12 @@ func (q *Queries) UpsertClip(ctx context.Context, arg UpsertClipParams) error {
 		arg.PeakAt,
 		arg.LiveOffsetMs,
 		arg.EditPlan,
+		arg.FinalMessage,
+		arg.PublishedID,
+		arg.PublishedUrl,
+		arg.PublishError,
+		arg.PublishingAt,
+		arg.PublishedAt,
 	)
 	return err
 }

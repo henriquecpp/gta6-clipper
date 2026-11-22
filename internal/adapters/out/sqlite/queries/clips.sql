@@ -9,7 +9,8 @@ INSERT INTO clips (
     created_at, updated_at,
     detected_at, preview_sent_at, approved_at, discarded_at, expired_at,
     editing_at, rendered_at, delivered_at, failed_at,
-    peak_at, live_offset_ms, edit_plan
+    peak_at, live_offset_ms, edit_plan,
+    final_message, published_id, published_url, publish_error, publishing_at, published_at
 ) VALUES (
     ?, ?, ?, ?, ?, ?,
     ?, ?, ?, ?, ?,
@@ -20,7 +21,8 @@ INSERT INTO clips (
     ?, ?,
     ?, ?, ?, ?, ?,
     ?, ?, ?, ?,
-    ?, ?, ?
+    ?, ?, ?,
+    ?, ?, ?, ?, ?, ?
 )
 ON CONFLICT (id) DO UPDATE SET
     streamer           = excluded.streamer,
@@ -61,7 +63,13 @@ ON CONFLICT (id) DO UPDATE SET
     failed_at          = excluded.failed_at,
     peak_at            = excluded.peak_at,
     live_offset_ms     = excluded.live_offset_ms,
-    edit_plan          = excluded.edit_plan;
+    edit_plan          = excluded.edit_plan,
+    final_message      = excluded.final_message,
+    published_id       = excluded.published_id,
+    published_url      = excluded.published_url,
+    publish_error      = excluded.publish_error,
+    publishing_at      = excluded.publishing_at,
+    published_at       = excluded.published_at;
 
 -- name: GetClip :one
 SELECT * FROM clips WHERE id = ?;

@@ -309,7 +309,7 @@ func TestProduceQueue(t *testing.T) {
 			return nil
 		}
 		m := fakes.NewMetrics()
-		q := app.NewProduceQueue(produce, 1, 2, 10*time.Second, discardLog(), m)
+		q := app.NewJobQueue("produce", produce, 1, 2, 10*time.Second, discardLog(), m)
 		ctx, cancel := context.WithCancel(context.Background())
 		finished := make(chan error, 1)
 		go func() { finished <- q.Run(ctx) }()
@@ -349,7 +349,7 @@ func TestProduceQueue(t *testing.T) {
 func TestProduceQueueGraceExpires(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		cancelled := make(chan struct{})
-		q := app.NewProduceQueue(func(ctx context.Context, _ domain.ClipID) error {
+		q := app.NewJobQueue("produce", func(ctx context.Context, _ domain.ClipID) error {
 			<-ctx.Done()
 			close(cancelled)
 			return ctx.Err()

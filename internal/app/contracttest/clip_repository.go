@@ -105,6 +105,36 @@ func RunClipRepository(t *testing.T, newRepo func(t *testing.T) app.ClipReposito
 		assertEqual(t, mustGet(t, repo, c.ID), c)
 	})
 
+	t.Run("PublicationRoundTrip", func(t *testing.T) {
+		repo := newRepo(t)
+		c := FullClip("c-publish", base)
+		steps := []domain.ClipState{domain.StatePreviewSent, domain.StateApproved, domain.StateEditing,
+			domain.StateRendered, domain.StateDelivered, domain.StatePublishing}
+		for i, s := range steps {
+			if err := c.Transition(s, base.Add(time.Duration(i+1)*time.Minute)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		c.FinalMedia, c.FinalMessage = "/output/c-publish.mp4", "111:42,222:43"
+		if err := c.PublishFailed("youtube: 403 quotaExceeded", base.Add(8*time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+		mustSave(t, repo, c)
+		assertEqual(t, mustGet(t, repo, c.ID), c)
+
+		if err := c.Transition(domain.StatePublishing, base.Add(9*time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.MarkPublished(domain.Publication{ID: "dQw4w9WgXcQ", URL: "https://www.youtube.com/shorts/dQw4w9WgXcQ"}, base.Add(10*time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+		mustSave(t, repo, c)
+		assertEqual(t, mustGet(t, repo, c.ID), c)
+		if got, err := repo.ListByState(context.Background(), domain.StatePublished); err != nil || len(got) != 1 {
+			t.Fatalf("published clips = %d, %v", len(got), err)
+		}
+	})
+
 	t.Run("GetNotFound", func(t *testing.T) {
 		repo := newRepo(t)
 		_, err := repo.Get(context.Background(), "missing")

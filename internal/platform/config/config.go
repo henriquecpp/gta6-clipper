@@ -28,6 +28,7 @@ type Config struct {
 	Render      Render      `yaml:"render"`
 	Whisper     Whisper     `yaml:"whisper"`
 	Editor      Editor      `yaml:"editor"`
+	YouTube     YouTube     `yaml:"youtube"`
 	HTTP        HTTP        `yaml:"http"`
 	Detection   Detection   `yaml:"detection"`
 	DBPath      string      `yaml:"db_path"`
@@ -145,6 +146,26 @@ type Pricing struct {
 	CacheRead  float64 `yaml:"cache_read"`
 }
 
+// YouTube holds the publication of final videos as Shorts (only when the
+// human taps "publish"). The OAuth client comes from the environment.
+type YouTube struct {
+	// TokenFile stores the channel authorization (clipper-data volume).
+	TokenFile string `yaml:"token_file"`
+	// Privacy is public, unlisted or private.
+	Privacy           string   `yaml:"privacy"`
+	CategoryID        string   `yaml:"category_id"`
+	NotifySubscribers bool     `yaml:"notify_subscribers"`
+	MadeForKids       bool     `yaml:"made_for_kids"`
+	UploadTimeout     Duration `yaml:"upload_timeout"`
+	// TitleHashtags are appended to the title while it fits (100 characters).
+	TitleHashtags []string `yaml:"title_hashtags"`
+	// Hashtags are appended to the description when the post text lacks them.
+	Hashtags []string `yaml:"hashtags"`
+	// Tags are the base search tags; the streamer, the game and the post
+	// hashtags are added (500 characters in total).
+	Tags []string `yaml:"tags"`
+}
+
 // HTTP server settings.
 type HTTP struct {
 	Addr            string   `yaml:"addr"`
@@ -210,6 +231,8 @@ type Secrets struct {
 	TelegramAllowedChatIDs []int64
 	AnthropicAPIKey        string
 	AnthropicModel         string
+	YouTubeClientID        string
+	YouTubeClientSecret    string
 }
 
 // HasTwitch reports whether Twitch credentials are present.
@@ -219,6 +242,9 @@ func (s Secrets) HasTwitch() bool { return s.TwitchClientID != "" && s.TwitchCli
 func (s Secrets) HasTelegram() bool {
 	return s.TelegramBotToken != "" && len(s.TelegramAllowedChatIDs) > 0
 }
+
+// HasYouTube reports whether the YouTube OAuth client is configured.
+func (s Secrets) HasYouTube() bool { return s.YouTubeClientID != "" && s.YouTubeClientSecret != "" }
 
 // HasAnthropic reports whether the editor can call Claude.
 func (s Secrets) HasAnthropic() bool { return s.AnthropicAPIKey != "" && s.AnthropicModel != "" }
@@ -258,11 +284,13 @@ func Parse(raw []byte, getenv func(string) string) (*Config, error) {
 
 func readSecrets(getenv func(string) string) (Secrets, error) {
 	s := Secrets{
-		TwitchClientID:     strings.TrimSpace(getenv("TWITCH_CLIENT_ID")),
-		TwitchClientSecret: strings.TrimSpace(getenv("TWITCH_CLIENT_SECRET")),
-		TelegramBotToken:   strings.TrimSpace(getenv("TELEGRAM_BOT_TOKEN")),
-		AnthropicAPIKey:    strings.TrimSpace(getenv("ANTHROPIC_API_KEY")),
-		AnthropicModel:     strings.TrimSpace(getenv("ANTHROPIC_MODEL")),
+		TwitchClientID:      strings.TrimSpace(getenv("TWITCH_CLIENT_ID")),
+		TwitchClientSecret:  strings.TrimSpace(getenv("TWITCH_CLIENT_SECRET")),
+		TelegramBotToken:    strings.TrimSpace(getenv("TELEGRAM_BOT_TOKEN")),
+		AnthropicAPIKey:     strings.TrimSpace(getenv("ANTHROPIC_API_KEY")),
+		AnthropicModel:      strings.TrimSpace(getenv("ANTHROPIC_MODEL")),
+		YouTubeClientID:     strings.TrimSpace(getenv("YOUTUBE_CLIENT_ID")),
+		YouTubeClientSecret: strings.TrimSpace(getenv("YOUTUBE_CLIENT_SECRET")),
 	}
 	for _, part := range strings.Split(getenv("TELEGRAM_ALLOWED_CHAT_IDS"), ",") {
 		part = strings.TrimSpace(part)

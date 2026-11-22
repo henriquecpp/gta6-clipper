@@ -18,6 +18,7 @@ const (
 	CallbackApprove = "a:"
 	CallbackDiscard = "d:"
 	CallbackRetry   = "r:"
+	CallbackPublish = "p:"
 )
 
 // maxCaption is the Telegram caption limit (characters after entity parsing).
@@ -72,8 +73,10 @@ func statusLine(c *domain.Clip) string {
 	switch c.State {
 	case domain.StateApproved, domain.StateEditing, domain.StateRendered:
 		return "✅ Aprovado — gerando…"
-	case domain.StateDelivered:
+	case domain.StateDelivered, domain.StatePublishing:
 		return "✅ Entregue"
+	case domain.StatePublished:
+		return "✅ Entregue e publicado no YouTube"
 	case domain.StateDiscarded:
 		return "🗑️ Descartado"
 	case domain.StateExpired:
@@ -84,10 +87,25 @@ func statusLine(c *domain.Clip) string {
 	return ""
 }
 
-// finalCaption is the caption of the delivered video.
-func finalCaption(c *domain.Clip, post domain.Post) string {
-	return truncate(fmt.Sprintf("✅ <b>%s</b>\n%s — %s\nTexto do post na próxima mensagem. Nada foi publicado.",
-		esc(post.Headline), esc(c.Streamer), esc(c.Game)), maxCaption)
+// finalCaption is the caption of the delivered video, with the publication
+// status when publishing is enabled.
+func finalCaption(c *domain.Clip, headline string, publish bool) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "✅ <b>%s</b>\n%s — %s\nTexto do post na próxima mensagem.", esc(headline), esc(c.Streamer), esc(c.Game))
+	switch {
+	case c.State == domain.StatePublished:
+		fmt.Fprintf(&b, "\n\n▶️ Publicado no YouTube: %s", esc(c.PublishedURL))
+	case c.State == domain.StatePublishing:
+		b.WriteString("\n\n⏫ Enviando para o YouTube…")
+	case !publish:
+		b.WriteString(" Nada foi publicado.")
+	default:
+		if c.PublishError != "" {
+			fmt.Fprintf(&b, "\n\n⚠️ Falha ao publicar: %s", esc(truncate(c.PublishError, 300)))
+		}
+		b.WriteString("\n\nNada foi publicado ainda: toque em 📤 para publicar no YouTube.")
+	}
+	return truncate(b.String(), maxCaption)
 }
 
 // failureText is the alert sent when a clip fails.

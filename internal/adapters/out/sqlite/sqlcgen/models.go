@@ -49,6 +49,12 @@ type Clip struct {
 	PeakAt           sql.NullString
 	LiveOffsetMs     int64
 	EditPlan         string
+	FinalMessage     string
+	PublishedID      string
+	PublishedUrl     string
+	PublishError     string
+	PublishingAt     sql.NullString
+	PublishedAt      sql.NullString
 }
 
 type Decision struct {

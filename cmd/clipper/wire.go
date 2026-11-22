@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/claude"
+	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/youtube"
 	"github.com/henriquecpp/gta6-clipper/internal/app"
 	"github.com/henriquecpp/gta6-clipper/internal/domain"
 	"github.com/henriquecpp/gta6-clipper/internal/domain/detect"
@@ -137,4 +138,58 @@ type disabledEditor struct{}
 
 func (disabledEditor) Plan(context.Context, domain.EditRequest) (domain.EditProposal, domain.Usage, error) {
 	return domain.EditProposal{}, domain.Usage{}, notConfigured("anthropic is not configured (ANTHROPIC_API_KEY / ANTHROPIC_MODEL)")
+}
+
+// publishConfig maps the youtube settings to the publication use case.
+func publishConfig(c *config.Config) app.PublishConfig {
+	return app.PublishConfig{
+		Upload: domain.UploadOptions{
+			TitleHashtags: c.YouTube.TitleHashtags,
+			Hashtags:      c.YouTube.Hashtags,
+			Tags:          c.YouTube.Tags,
+			TextLanguage:  "pt-BR", // the editor writes headline and post text in pt-BR
+		},
+		Streamers: streamerMap(c),
+	}
+}
+
+// newYouTube builds the YouTube client (the OAuth client comes from .env).
+func newYouTube(c *config.Config, log *slog.Logger) *youtube.Client {
+	return youtube.New(youtube.Config{
+		ClientID:          c.Secrets.YouTubeClientID,
+		ClientSecret:      c.Secrets.YouTubeClientSecret,
+		TokenFile:         c.YouTube.TokenFile,
+		Privacy:           c.YouTube.Privacy,
+		CategoryID:        c.YouTube.CategoryID,
+		NotifySubscribers: c.YouTube.NotifySubscribers,
+		MadeForKids:       c.YouTube.MadeForKids,
+		UploadTimeout:     c.YouTube.UploadTimeout.D(),
+	}, youtube.WithLogger(log))
+}
+
+// newPublisher returns the YouTube publisher and whether publishing is
+// enabled: it needs the OAuth client and a stored channel authorization.
+func newPublisher(c *config.Config, log *slog.Logger) (app.Publisher, bool) {
+	if !c.Secrets.HasYouTube() {
+		log.Info("YOUTUBE_CLIENT_ID/YOUTUBE_CLIENT_SECRET missing: publishing on YouTube disabled")
+		return disabledPublisher{}, false
+	}
+	yt := newYouTube(c, log)
+	if err := yt.Load(); err != nil {
+		log.Warn("youtube channel not authorized: publishing disabled until `task auth:youtube` is run and the app restarted",
+			slog.String("err", err.Error()))
+		return disabledPublisher{}, false
+	}
+	log.Info("publishing on YouTube enabled", slog.String("privacy", c.YouTube.Privacy))
+	return yt, true
+}
+
+// errYouTubeDisabled is the failure of a publication without YouTube.
+var errYouTubeDisabled error = notConfigured("youtube is not configured (YOUTUBE_CLIENT_ID / YOUTUBE_CLIENT_SECRET / task auth:youtube)")
+
+// disabledPublisher keeps the publication use case wired without YouTube.
+type disabledPublisher struct{}
+
+func (disabledPublisher) Publish(context.Context, domain.MediaRef, domain.UploadMeta) (domain.Publication, error) {
+	return domain.Publication{}, errYouTubeDisabled
 }

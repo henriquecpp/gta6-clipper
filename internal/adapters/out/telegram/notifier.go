@@ -21,13 +21,25 @@ type Notifier struct {
 	chats []int64
 	ttl   time.Duration
 	log   *slog.Logger
+	// publish shows the "publish on YouTube" button on final videos.
+	publish bool
 }
 
 var _ app.Notifier = (*Notifier)(nil)
 
+// Option configures the notifier.
+type Option func(*Notifier)
+
+// WithPublishing shows the "publish on YouTube" button on final videos.
+func WithPublishing() Option { return func(n *Notifier) { n.publish = true } }
+
 // NewNotifier builds the notifier. The bot is shared with the inbound bot adapter.
-func NewNotifier(bot *telego.Bot, chats []int64, ttl time.Duration, log *slog.Logger) *Notifier {
-	return &Notifier{bot: bot, chats: chats, ttl: ttl, log: log}
+func NewNotifier(bot *telego.Bot, chats []int64, ttl time.Duration, log *slog.Logger, opts ...Option) *Notifier {
+	n := &Notifier{bot: bot, chats: chats, ttl: ttl, log: log}
+	for _, o := range opts {
+		o(n)
+	}
+	return n
 }
 
 // redact removes the bot token from errors: transport errors from net/http
@@ -58,6 +70,22 @@ func keyboard(c *domain.Clip) *telego.InlineKeyboardMarkup {
 		}}}
 	}
 	return &telego.InlineKeyboardMarkup{InlineKeyboard: [][]telego.InlineKeyboardButton{}}
+}
+
+// finalKeyboard returns the button of the final video message (nil = none):
+// publish while delivered, a link once published.
+func finalKeyboard(c *domain.Clip, publish bool) *telego.InlineKeyboardMarkup {
+	switch {
+	case c.State == domain.StatePublished && c.PublishedURL != "":
+		return &telego.InlineKeyboardMarkup{InlineKeyboard: [][]telego.InlineKeyboardButton{{
+			{Text: "▶️ Ver no YouTube", URL: c.PublishedURL},
+		}}}
+	case publish && (c.State == domain.StateRendered || c.State == domain.StateDelivered):
+		return &telego.InlineKeyboardMarkup{InlineKeyboard: [][]telego.InlineKeyboardButton{{
+			{Text: "📤 Publicar no YouTube", CallbackData: CallbackPublish + string(c.ID)},
+		}}}
+	}
+	return nil
 }
 
 // SendPreview uploads the preview to every chat. It fails only if no chat
@@ -150,28 +178,59 @@ func (n *Notifier) SendFailure(ctx context.Context, c *domain.Clip, reason strin
 	return nil
 }
 
-// SendFinal sends the final video (headline as caption) and then the post
-// text as a plain message, easy to copy. Nothing is published anywhere.
-func (n *Notifier) SendFinal(ctx context.Context, c *domain.Clip, video domain.MediaRef, post domain.Post) error {
+// SendFinal sends the final video (headline as caption, with the publish
+// button when publishing is enabled) and then the post text as a plain
+// message, easy to copy. Nothing is published until the button is tapped.
+func (n *Notifier) SendFinal(ctx context.Context, c *domain.Clip, video domain.MediaRef, post domain.Post) (domain.MessageRef, error) {
+	view := c.Clone()
+	view.State = domain.StateDelivered // the caption and button once delivered
+	var refs []msgRef
 	var errs []error
-	delivered := 0
 	for _, chat := range n.chats {
-		if _, err := n.sendVideo(ctx, chat, string(video), finalCaption(c, post), nil); err != nil {
+		msg, err := n.sendVideo(ctx, chat, string(video), finalCaption(view, post.Headline, n.publish), finalKeyboard(view, n.publish))
+		if err != nil {
 			errs = append(errs, fmt.Errorf("chat %d: %w", chat, n.redact(err)))
 			continue
 		}
-		delivered++
+		refs = append(refs, msgRef{chat: chat, msg: msg})
 		if _, err := n.bot.SendMessage(ctx, &telego.SendMessageParams{ChatID: telego.ChatID{ID: chat}, Text: truncate(post.Text, 4000)}); err != nil {
 			errs = append(errs, fmt.Errorf("chat %d post text: %w", chat, n.redact(err)))
 		}
 	}
-	if delivered == 0 {
-		return fmt.Errorf("send final video: %w", errors.Join(errs...))
+	if len(refs) == 0 {
+		return "", fmt.Errorf("send final video: %w", errors.Join(errs...))
 	}
 	if len(errs) > 0 {
 		n.log.Warn("final video not fully delivered", slog.String("clip_id", string(c.ID)), slog.String("err", errors.Join(errs...).Error()))
 	}
-	return nil
+	return encodeRefs(refs), nil
+}
+
+// UpdateFinal edits the caption and button of the final video message(s) as
+// the publication progresses.
+func (n *Notifier) UpdateFinal(ctx context.Context, c *domain.Clip) error {
+	refs, err := decodeRefs(c.FinalMessage)
+	if err != nil {
+		return err
+	}
+	kb := finalKeyboard(c, n.publish)
+	if kb == nil {
+		kb = &telego.InlineKeyboardMarkup{InlineKeyboard: [][]telego.InlineKeyboardButton{}}
+	}
+	var errs []error
+	for _, r := range refs {
+		_, err := n.bot.EditMessageCaption(ctx, &telego.EditMessageCaptionParams{
+			ChatID:      telego.ChatID{ID: r.chat},
+			MessageID:   r.msg,
+			Caption:     finalCaption(c, c.Headline, n.publish),
+			ParseMode:   telego.ModeHTML,
+			ReplyMarkup: kb,
+		})
+		if err != nil {
+			errs = append(errs, fmt.Errorf("edit message %d in chat %d: %w", r.msg, r.chat, n.redact(err)))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // SendAlert sends an informational message about a clip.

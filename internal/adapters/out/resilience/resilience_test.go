@@ -177,10 +177,22 @@ func TestAllDecoratorsDelegate(t *testing.T) {
 	}
 	_ = dn.UpdatePreview(ctx, c)
 	_ = dn.SendFailure(ctx, c, "x")
-	_ = dn.SendFinal(ctx, c, "v", domain.Post{})
+	if ref, err := dn.SendFinal(ctx, c, "v", domain.Post{}); err != nil || ref == "" {
+		t.Fatalf("send final = %q %v", ref, err)
+	}
+	_ = dn.UpdateFinal(ctx, c)
 	_ = dn.SendAlert(ctx, c, "y")
-	if len(n.Sent) != 1 || len(n.Updates) != 1 || len(n.Failures) != 1 || len(n.Finals) != 1 || len(n.Alerts) != 1 {
+	if len(n.Sent) != 1 || len(n.Updates) != 1 || len(n.Failures) != 1 || len(n.Finals) != 1 || len(n.Alerts) != 1 || len(n.FinalUpdates) != 1 {
 		t.Fatalf("notifier calls = %+v", n)
+	}
+	// Uploads are never retried: one failure is returned as is.
+	pub := &fakes.Publisher{Err: errors.New("503 backend error")}
+	if _, err := NewPublisher(pub, PublishPolicy, deps).Publish(ctx, "/output/v.mp4", domain.UploadMeta{}); err == nil {
+		t.Fatal("publish error swallowed")
+	}
+	pub.Err = nil
+	if p, err := NewPublisher(pub, PublishPolicy, deps).Publish(ctx, "/output/v.mp4", domain.UploadMeta{Title: "t"}); err != nil || p.ID == "" || pub.Count() != 1 {
+		t.Fatalf("publish = %+v %v (uploads %d)", p, err, pub.Count())
 	}
 	pl := &fakes.Platform{Clips: map[string][]domain.ViewerClip{"b": {{ID: "x", CreatedAt: time.Now()}}}}
 	if got, err := NewPlatform(pl, NetworkPolicy, deps).RecentClips(ctx, "b", time.Time{}); err != nil || len(got) != 1 {

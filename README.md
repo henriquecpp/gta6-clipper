@@ -12,7 +12,9 @@ Clipador automático de lives da **Twitch** com **aprovação humana via Telegra
 4. Só depois da aprovação: transcrição local na GPU (whisper.cpp) → **Claude** escolhe o corte, escreve a
    manchete, a legenda em PT-BR (traduzida se preciso) e o texto do post → render vertical 9:16 com legenda
    queimada (ffmpeg + NVENC) → vídeo e texto entregues no Telegram.
-5. **Nunca publica nada automaticamente.** A publicação é manual, sua.
+5. **Nunca publica nada sozinho.** Com o YouTube configurado, o vídeo final chega com o botão
+   **📤 Publicar no YouTube**, e só esse toque publica o vídeo como Short no seu canal, com título, descrição e
+   tags de GTA 6 ([Publicação no YouTube](#publicação-no-youtube-shorts)). Sem isso, a publicação é manual.
 
 **Regra de custo:** monitoramento, detecção, transcrição e prévia custam zero token de IA. O Claude só é
 chamado para clipes aprovados (meta: < US$ 0,05 por vídeo; com Haiku 5.5 fica em torno de US$ 0,001).
@@ -31,11 +33,12 @@ Instruções do projeto: [CLAUDE.md](CLAUDE.md)
 6. [Primeira execução](#primeira-execução)
 7. [Operação](#operação)
 8. [Formato para Shorts](#formato-para-shorts)
-9. [Ajuste da detecção](#ajuste-da-detecção)
-10. [Observabilidade](#observabilidade)
-11. [Troubleshooting](#troubleshooting)
-12. [Riscos legais](#riscos-legais)
-13. [Desenvolvimento](#desenvolvimento)
+9. [Publicação no YouTube (Shorts)](#publicação-no-youtube-shorts)
+10. [Ajuste da detecção](#ajuste-da-detecção)
+11. [Observabilidade](#observabilidade)
+12. [Troubleshooting](#troubleshooting)
+13. [Riscos legais](#riscos-legais)
+14. [Desenvolvimento](#desenvolvimento)
 
 ---
 
@@ -57,14 +60,18 @@ Twitch ──► MonitorLives (polling Get Streams a cada 45 s, filtro de jogo)
      retém a janela (sem re-encode) → clipe "detected" → prévia 9:16 → Telegram [Aprovar][Descartar]
                               │ você aprova
                               ▼
-     whisper (GPU) → Claude (corte, manchete, legenda, post) → render 9:16 + ASS → Telegram
+     whisper (GPU) → Claude (corte, manchete, legenda, post) → render 9:16 + ASS → Telegram [Publicar]
+                              │ você toca em Publicar (opcional)
+                              ▼
+     upload resumível na YouTube Data API → Short no seu canal → link na mesma mensagem
 ```
 
 - **Arquitetura hexagonal** (ports & adapters): `domain` (regras puras) ← `app` (casos de uso e portas) ←
   `adapters` (Twitch, Telegram, Claude, whisper, ffmpeg, SQLite) ← `cmd/clipper` (composição). A regra de
   dependência é imposta pelo lint (depguard).
-- **Estado do clipe:** `detected → preview_sent → approved → editing → rendered → delivered`, com
-  `discarded`, `expired` e `failed` (retentativa manual com `/retry`). Toda transição é feita em transação,
+- **Estado do clipe:** `detected → preview_sent → approved → editing → rendered → delivered →
+  publishing → published`, com `discarded`, `expired` e `failed` (retentativa manual com `/retry`); um
+  upload que falha volta para `delivered` e o botão de publicar reaparece. Toda transição é feita em transação,
   então cliques duplicados são inofensivos.
 - **Persistência:** SQLite (pure Go) com sqlc + goose; migrations aplicadas na inicialização.
 
@@ -143,6 +150,7 @@ Sem o go-task, use os scripts PowerShell de [`scripts/`](scripts/) (equivalentes
 | `TELEGRAM_BOT_TOKEN` | Bot que envia prévias e recebe aprovações |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | Chats que recebem prévias e podem comandar o bot (separados por vírgula) |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Editor (Claude); ex.: `claude-haiku-5-5` |
+| `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET` | Opcional: cliente OAuth para publicar no YouTube ([como obter](#publicação-no-youtube-shorts)) |
 | `LOG_LEVEL` | `debug`, `info`, `warn`, `error` |
 
 Sem alguma credencial o app **sobe em modo degradado** e avisa no log o que ficou desligado
@@ -271,6 +279,9 @@ Ele captura por 60 s, mostra frames de áudio/fala, retém 20 s e estima a latê
   "⌛ Expirado", "⚠️ Falhou: …" (com botão **🔁 Tentar de novo**).
 - O vídeo final chega com a manchete na legenda; o **texto do post** vem na mensagem seguinte, pronto para
   copiar. O arquivo também fica em `.\output\<data>_<streamer>_<id>.mp4`.
+- Com o YouTube configurado, o vídeo final traz o botão **📤 Publicar no YouTube**. A legenda da mensagem
+  acompanha o envio ("⏫ Enviando para o YouTube…") e, no fim, mostra o link do Short com o botão
+  **▶️ Ver no YouTube**. Se falhar, mostra o motivo e o botão volta.
 - Comandos: `/status` (lives monitoradas e as que estão ao vivo em outro jogo, fila, último erro, custo do dia), `/pending` (prévias aguardando),
   `/retry <clip_id>` (reprocessa um clipe que falhou; o plano do Claude já pago é reaproveitado).
 - Mensagens e botões de chats fora da allowlist são ignorados.
@@ -283,6 +294,7 @@ Ele captura por 60 s, mostra frames de áudio/fala, retém 20 s e estima a latê
 | Logs | `task logs` (`scripts\logs.ps1 -Service app`) |
 | Backup do banco | `task db:backup` (`scripts\backup.ps1`) → `.\backups\` |
 | Reautorizar a Twitch | `task auth:twitch` |
+| Autorizar/reautorizar o canal do YouTube | `task auth:youtube` (depois `task up` para o app recarregar) |
 | Testar transcrição + render sem Claude | `docker compose run --rm --no-deps app dryrun` (lista clipes com mídia retida) e `... app dryrun <clip_id>` |
 
 - **`dryrun`:** transcreve a janela retida de um clipe real, monta um corte sem IA (≈30 s em volta do pico,
@@ -290,7 +302,9 @@ Ele captura por 60 s, mostra frames de áudio/fala, retém 20 s e estima a latê
   envia nada e não chama o Claude; serve para validar whisper e render com mídia real.
 
 - **Reinício:** ao subir, o app retoma o que ficou pela metade (reenvia prévias de clipes `detected`,
-  reprocessa `approved`/`editing`/`rendered`) e apaga mídia órfã.
+  reprocessa `approved`/`editing`/`rendered`) e apaga mídia órfã. Um upload para o YouTube interrompido
+  **não** é reenviado sozinho (poderia publicar duas vezes): a mensagem avisa para conferir o canal e o botão
+  de publicar volta.
 - **Desligamento** (`task down`/SIGTERM): a ingestão para, jobs em andamento têm `http.shutdown_timeout`
   (45 s) para terminar; o resto é retomado no próximo início.
 - **Memória:** o buffer fica em tmpfs, que conta no limite de memória do container `app` (6 GB no Compose):
@@ -319,6 +333,49 @@ clipe (`portrait_download_url` no Get Clips Download) e só cria clipes de VOD (
 Para canais de terceiros não há como obter vídeo vertical pela API; por isso o app recorta e monta o 9:16
 sozinho. Criar clipes com Create Clip (título e duração de 5–60 s) também não serve: o clipe é criado no
 canal do streamer, em nome da sua conta, e o projeto nunca publica nada sozinho.
+
+## Publicação no YouTube (Shorts)
+
+Opcional. Com isso configurado, o vídeo final no Telegram ganha o botão **📤 Publicar no YouTube**; nada é
+enviado sem esse toque. O vídeo já sai em 9:16 com até 3 minutos, então o próprio YouTube o trata como
+**Short** (a API não tem um campo "Short").
+
+**O que é enviado** (montado a partir do que o Claude escreveu, sem custo extra de IA):
+- **Título:** a manchete + `youtube.title_hashtags` (`#GTA6 #Shorts`) enquanto couber nos 100 caracteres.
+- **Descrição:** o texto do post (que já credita o streamer), o link `twitch.tv/<streamer>` e as hashtags de
+  `youtube.hashtags` que ainda não estiverem no texto (`#GTA6 #GTAVI #GrandTheftAutoVI #Shorts`).
+- **Tags:** `youtube.tags` (GTA 6, GTA VI, Grand Theft Auto VI, GTA 6 gameplay…) + o streamer, o jogo e as
+  hashtags do post, dentro do limite de 500 caracteres da API.
+- **Categoria** Jogos (`category_id: "20"`), idioma do texto `pt-BR`, idioma do áudio = `language` do
+  streamer, "não é conteúdo para crianças", privacidade `youtube.privacy` (`public` por padrão; use
+  `unlisted` ou `private` para testar).
+
+**Configuração (uma vez):**
+1. Em <https://console.cloud.google.com>, crie um projeto e ative a **YouTube Data API v3**
+   (APIs e serviços → Biblioteca).
+2. Configure a **tela de consentimento OAuth** (público **Externo**) e adicione sua conta como usuário de teste.
+   **Importante:** enquanto o app estiver no status **Testing**, o Google faz a autorização expirar em
+   **7 dias**. Para não precisar reautorizar toda semana, clique em **Publicar app** (status "Em produção").
+   Para uso pessoal não é preciso passar pela verificação; o Google mostra um aviso de "app não verificado"
+   na hora de autorizar, que você pode ignorar.
+3. Em **Credenciais → Criar credenciais → ID do cliente OAuth**, escolha o tipo
+   **"TVs e dispositivos de entrada limitada"** e copie o ID e a chave secreta para `YOUTUBE_CLIENT_ID` e
+   `YOUTUBE_CLIENT_SECRET` no `.env`.
+4. Rode `task auth:youtube`: o comando mostra um endereço (`https://www.google.com/device`) e um código.
+   Abra no navegador, digite o código, **escolha a conta/canal** onde os Shorts vão sair e autorize. No fim ele
+   mostra o nome do canal autorizado (confira!) e salva o token no volume `clipper-data`.
+5. `task up` para o app recarregar. O log mostra `publishing on YouTube enabled`.
+
+**Limites e comportamento:**
+- **Cota:** a documentação atual da YouTube Data API dá **100 uploads por dia** por projeto (bucket "Video
+  Uploads", 1 unidade por envio). Acima disso a mensagem mostra `quotaExceeded`.
+- O envio usa o protocolo de **upload resumível**: se a conexão cair no meio, o app pergunta ao YouTube quanto
+  já chegou e continua de onde parou (até 5 tentativas, `youtube.upload_timeout` no total). Ele **nunca**
+  recomeça um upload do zero sozinho, para não publicar o mesmo vídeo duas vezes.
+- Escopo pedido: `https://www.googleapis.com/auth/youtube` (o fluxo para dispositivos não aceita o escopo
+  só de upload). O token fica em `/data/youtube_token.json` (modo 0600), nunca no repositório.
+- Se a autorização for revogada ou expirar, a mensagem mostra o erro com a instrução de rodar
+  `task auth:youtube` de novo.
 
 ## Ajuste da detecção
 
@@ -385,8 +442,12 @@ Endpoints internos (só em `localhost`): `/healthz`, `/readyz`, `/metrics`.
 - **Direitos autorais:** o conteúdo é do **streamer**; o jogo (ex.: GTA VI) é propriedade da **publicadora**;
   **músicas licenciadas** tocadas na live podem gerar strikes/DMCA nas redes onde você publicar.
 - O projeto só monitora canais da allowlist com `allows_clips: true`, sempre credita o streamer no texto do
-  post e **nunca publica nada automaticamente** — mas a decisão de publicar, e a responsabilidade por obter
-  autorização, são **suas**. Peça permissão aos streamers.
+  post e na descrição do YouTube e **só publica quando você toca em Publicar**, mas a decisão de publicar, e a
+  responsabilidade por obter autorização, são **suas**. Peça permissão aos streamers.
+- **YouTube:** reenviar conteúdo de terceiros pode gerar **reivindicações do Content ID** (o vídeo fica
+  bloqueado ou a receita vai para o dono) e **avisos de direitos autorais**; três avisos encerram o canal.
+  Conteúdo reaproveitado com pouca transformação também pode não ser elegível para monetização. Comece com
+  `youtube.privacy: unlisted` se quiser testar sem expor o canal.
 - A captura fica atrás da porta `MediaCapture`; é possível trocar a fonte por clipes oficiais se necessário.
 
 ## Desenvolvimento
