@@ -73,9 +73,34 @@ youtube:                    # publication as Shorts, only when you tap "Publicar
   made_for_kids: false
   upload_timeout: 15m
   token_file: /data/youtube_token.json
-  title_hashtags: ["#GTA6", "#Shorts"]                         # appended to the headline while it fits (100 chars)
-  hashtags: ["#GTA6", "#GTAVI", "#GrandTheftAutoVI", "#Shorts"] # added to the description if the post text lacks them
-  tags: ["GTA 6", "GTA VI", "Grand Theft Auto VI", "GTA 6 gameplay", "GTA 6 clips", "GTA 6 momentos engraçados", "GTA 6 Brasil", "Twitch", "clips"]
+  # {streamer} becomes the login. Few, related hashtags: unrelated ones (or more than 60) get ignored or removed.
+  title_hashtags: ["#GTA6", "#Shorts"]                                       # appended to the title while it fits (100 chars)
+  hashtags: ["#GTA6", "#GTAVI", "#GrandTheftAutoVI", "#Shorts", "#{streamer}"] # added to the description if missing
+  # Most important first; the editor's tags of the moment come before these and the
+  # 500-character budget cuts the tail. Tags weigh little in discovery (title and
+  # description weigh more), but catch spelling variants.
+  tags:
+    - "{streamer}"
+    - "{streamer} gta 6"
+    - GTA 6
+    - GTA VI
+    - GTA6
+    - Grand Theft Auto VI
+    - Grand Theft Auto 6
+    - GTA 6 gameplay
+    - GTA 6 clips
+    - GTA 6 shorts
+    - GTA 6 momentos engraçados
+    - GTA 6 funny moments
+    - GTA 6 Brasil
+    - GTA 6 PT-BR
+    - GTA 6 live
+    - Vice City
+    - Leonida
+    - Rockstar Games
+    - clipes da twitch
+    - twitch clips
+    - melhores momentos
 
 http:
   addr: ":8080"

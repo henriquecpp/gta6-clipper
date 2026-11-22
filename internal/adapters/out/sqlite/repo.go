@@ -333,6 +333,9 @@ type planJSON struct {
 	Captions  []captionJSON `json:"captions"`
 	PostText  string        `json:"post_text"`
 	Reasoning string        `json:"reasoning,omitempty"`
+	// Search metadata of the Short (absent in plans made before it existed).
+	YouTubeTitle string   `json:"youtube_title,omitempty"`
+	SearchTags   []string `json:"search_tags,omitempty"`
 }
 
 type captionJSON struct {
@@ -345,7 +348,8 @@ func encodePlan(p *domain.EditPlan) (string, error) {
 	if p == nil {
 		return "", nil
 	}
-	j := planJSON{StartMS: p.Start.Milliseconds(), EndMS: p.End.Milliseconds(), Headline: p.Headline, PostText: p.PostText, Reasoning: p.Reasoning}
+	j := planJSON{StartMS: p.Start.Milliseconds(), EndMS: p.End.Milliseconds(), Headline: p.Headline, PostText: p.PostText, Reasoning: p.Reasoning,
+		YouTubeTitle: p.YouTubeTitle, SearchTags: p.SearchTags}
 	for _, c := range p.Captions {
 		j.Captions = append(j.Captions, captionJSON{StartMS: c.Start.Milliseconds(), EndMS: c.End.Milliseconds(), Text: c.Text})
 	}
@@ -362,7 +366,8 @@ func decodePlan(s string) (*domain.EditPlan, error) {
 		return nil, err
 	}
 	ms := func(v int64) time.Duration { return time.Duration(v) * time.Millisecond }
-	p := &domain.EditPlan{Start: ms(j.StartMS), End: ms(j.EndMS), Headline: j.Headline, PostText: j.PostText, Reasoning: j.Reasoning}
+	p := &domain.EditPlan{Start: ms(j.StartMS), End: ms(j.EndMS), Headline: j.Headline, PostText: j.PostText, Reasoning: j.Reasoning,
+		YouTubeTitle: j.YouTubeTitle, SearchTags: j.SearchTags}
 	for _, c := range j.Captions {
 		p.Captions = append(p.Captions, domain.Caption{Start: ms(c.StartMS), End: ms(c.EndMS), Text: c.Text})
 	}

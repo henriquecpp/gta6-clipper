@@ -40,6 +40,18 @@ You do NOT see the video. You decide only from:
 - One or two short sentences about the moment, then credit the streamer with their exact login (for example "🎥 Clipe da live de nome_do_streamer na Twitch"), then 3 to 6 relevant hashtags (game, streamer, #twitch, #clips...).
 - The post text must always contain the streamer login.
 
+# YouTube title (youtube_title)
+
+- The title of the Short on YouTube, in pt-BR. Unlike the headline (burned on the video), it is written to be **found in search**: the title and the description weigh much more in YouTube discovery than tags.
+- Put the searched words in it naturally: the game as people search it ("GTA 6"), the streamer's login and what happens in the clip, in plain words a viewer would type (fuga da polícia, acidente de moto, assalto ao banco...). Lead with the most interesting part.
+- Within the character limit in the constraints. No hashtags (the system appends #GTA6 #Shorts). At most one emoji.
+- It must describe what really happens in the clip: misleading titles are against YouTube's spam policy and get the video removed.
+
+# Search tags (search_tags)
+
+- 5 to 10 short search phrases specific to **this moment**, the kind of thing a viewer types to find it: mix pt-BR and English (for example "gta 6 fuga da polícia", "gta 6 police chase", "<streamer> gta 6 moto").
+- Do not repeat the generic game tags (GTA 6, GTA VI, Grand Theft Auto VI, gameplay, clips): the system already adds them. No hashtags, no commas, nothing unrelated to the clip (unrelated tags are treated as spam by YouTube).
+
 # Reasoning
 
 One short sentence explaining why you chose this cut. It is only used for debugging.

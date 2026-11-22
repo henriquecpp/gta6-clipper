@@ -78,6 +78,9 @@ type EditProposal struct {
 	Captions  []ProposedCaption
 	PostText  string
 	Reasoning string
+	// YouTubeTitle and SearchTags are the search metadata of the Short.
+	YouTubeTitle string
+	SearchTags   []string
 	// ToolUseID and RawInput keep the model's tool call for the retry
 	// conversation; RawText is any plain text the model returned instead.
 	ToolUseID string
@@ -85,7 +88,8 @@ type EditProposal struct {
 	RawText   string
 }
 
-// EditPlan is a validated edit: the cut, headline, captions and post text.
+// EditPlan is a validated edit: the cut, headline, captions and post text,
+// plus the YouTube title and the search tags of the moment.
 type EditPlan struct {
 	Start     time.Duration
 	End       time.Duration
@@ -93,7 +97,19 @@ type EditPlan struct {
 	Captions  []Caption
 	PostText  string
 	Reasoning string
+	// YouTubeTitle is the search-oriented title of the Short (empty: use the
+	// headline). SearchTags are phrases viewers would type to find the moment.
+	YouTubeTitle string
+	SearchTags   []string
 }
+
+// Limits of the YouTube metadata written by the editor. The title leaves
+// room for the title hashtags within YouTube's 100 characters.
+const (
+	MaxYouTubeTitleChars = 85
+	MaxSearchTags        = 12
+	MaxSearchTagChars    = 40
+)
 
 // Duration is the length of the cut.
 func (p EditPlan) Duration() time.Duration { return p.End - p.Start }
@@ -166,7 +182,44 @@ func NewEditPlan(p EditProposal, c EditConstraints) (EditPlan, error) {
 	if len(problems) > 0 {
 		return EditPlan{}, fmt.Errorf("%w: %s", ErrInvalidEditPlan, strings.Join(problems, "; "))
 	}
-	return EditPlan{Start: start, End: end, Headline: headline, Captions: captions, PostText: post, Reasoning: strings.TrimSpace(p.Reasoning)}, nil
+	return EditPlan{Start: start, End: end, Headline: headline, Captions: captions, PostText: post, Reasoning: strings.TrimSpace(p.Reasoning),
+		YouTubeTitle: youtubeTitle(p.YouTubeTitle), SearchTags: searchTags(p.SearchTags)}, nil
+}
+
+// youtubeTitle cleans the YouTube title. It is optional metadata: a bad one
+// falls back to the headline instead of failing the edit (and its retry).
+func youtubeTitle(s string) string {
+	s = strings.Join(strings.Fields(stripAngles(s)), " ")
+	if utf8.RuneCountInString(s) > MaxYouTubeTitleChars {
+		return ""
+	}
+	return s
+}
+
+// searchTags keeps up to MaxSearchTags distinct tags without hashtags,
+// commas, quotes or angle brackets; overly long ones are dropped.
+func searchTags(in []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, t := range in {
+		t = strings.Join(strings.Fields(strings.Map(func(r rune) rune {
+			switch r {
+			case '<', '>', ',', '"', '#':
+				return -1
+			}
+			return r
+		}, t)), " ")
+		key := strings.ToLower(t)
+		if t == "" || seen[key] || utf8.RuneCountInString(t) > MaxSearchTagChars {
+			continue
+		}
+		seen[key] = true
+		out = append(out, t)
+		if len(out) == MaxSearchTags {
+			break
+		}
+	}
+	return out
 }
 
 // IsInvalidEditPlan reports whether err is a validation error of the plan.

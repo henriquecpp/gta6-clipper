@@ -95,6 +95,7 @@ func RunClipRepository(t *testing.T, newRepo func(t *testing.T) app.ClipReposito
 			Start: 40 * time.Second, End: 70*time.Second + 500*time.Millisecond, Headline: "Ele pulou da ponte!",
 			Captions: []domain.Caption{{Start: 41 * time.Second, End: 44 * time.Second, Text: "Vocês viram isso?"}},
 			PostText: "Momento insano na live de streamer_a", Reasoning: "contexto",
+			YouTubeTitle: "streamer_a pulou da ponte no GTA 6", SearchTags: []string{"gta 6 pulo da ponte", "gta 6 bridge jump"},
 		}
 		c.Usage = domain.Usage{InputTokens: 6000, OutputTokens: 900, CacheWriteTokens: 2100, CacheReadTokens: 50}
 		c.Cost = 1312

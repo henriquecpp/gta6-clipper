@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -118,5 +119,37 @@ func TestSnapClipsCaptions(t *testing.T) {
 	plan.Captions = append(plan.Captions, Caption{Start: sec(80), End: sec(81), Text: "c"})
 	if got := plan.SnapToWords(tr, 0, constraints); len(got.Captions) != 2 {
 		t.Fatalf("captions = %+v", got.Captions)
+	}
+}
+
+func TestNewEditPlanSearchMetadata(t *testing.T) {
+	p := validProposal()
+	p.YouTubeTitle = "  alanzoka  foge da <polícia> no GTA 6 😂 "
+	p.SearchTags = []string{"  GTA 6 Fuga  ", "gta 6 fuga", "#perseguicao", "a,b", strings.Repeat("x", 41), "", `"quoted"`}
+	for range 20 {
+		p.SearchTags = append(p.SearchTags, "extra")
+	}
+	plan, err := NewEditPlan(p, constraints)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.YouTubeTitle != "alanzoka foge da polícia no GTA 6 😂" {
+		t.Errorf("youtube title = %q", plan.YouTubeTitle)
+	}
+	if want := []string{"GTA 6 Fuga", "perseguicao", "ab", "quoted", "extra"}; strings.Join(plan.SearchTags, "|") != strings.Join(want, "|") {
+		t.Errorf("search tags = %q, want %q", plan.SearchTags, want)
+	}
+	// Bad optional metadata never fails the edit: a long title falls back.
+	p.YouTubeTitle = strings.Repeat("título ", 20)
+	if plan, err := NewEditPlan(p, constraints); err != nil || plan.YouTubeTitle != "" {
+		t.Fatalf("long title: %q, %v", plan.YouTubeTitle, err)
+	}
+	many := make([]string, 30)
+	for i := range many {
+		many[i] = fmt.Sprintf("tag %d", i)
+	}
+	p.SearchTags = many
+	if plan, _ := NewEditPlan(p, constraints); len(plan.SearchTags) != MaxSearchTags {
+		t.Fatalf("kept %d search tags", len(plan.SearchTags))
 	}
 }

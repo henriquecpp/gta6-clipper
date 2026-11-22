@@ -61,9 +61,13 @@ func Defaults() *Config {
 			NotifySubscribers: true,
 			UploadTimeout:     dur(15 * time.Minute),
 			TitleHashtags:     []string{"#GTA6", "#Shorts"},
-			Hashtags:          []string{"#GTA6", "#GTAVI", "#GrandTheftAutoVI", "#Shorts"},
-			Tags: []string{"GTA 6", "GTA VI", "Grand Theft Auto VI", "GTA 6 gameplay", "GTA 6 clips",
-				"GTA 6 momentos engraçados", "GTA 6 Brasil", "Twitch", "clips"},
+			Hashtags:          []string{"#GTA6", "#GTAVI", "#GrandTheftAutoVI", "#Shorts", "#{streamer}"},
+			// Most important first: the 500 character budget cuts the tail
+			// (the editor's tags of the moment come before these).
+			Tags: []string{"{streamer}", "{streamer} gta 6", "GTA 6", "GTA VI", "GTA6", "Grand Theft Auto VI",
+				"Grand Theft Auto 6", "GTA 6 gameplay", "GTA 6 clips", "GTA 6 shorts", "GTA 6 momentos engraçados",
+				"GTA 6 funny moments", "GTA 6 Brasil", "GTA 6 PT-BR", "GTA 6 live", "Vice City", "Leonida",
+				"Rockstar Games", "clipes da twitch", "twitch clips", "melhores momentos"},
 		},
 		HTTP:   HTTP{Addr: ":8080", ShutdownTimeout: dur(45 * time.Second)},
 		DBPath: "/data/clipper.db",

@@ -23,18 +23,23 @@ type UploadMeta struct {
 	AudioLanguage string
 }
 
-// UploadOptions configures BuildUploadMeta (from the configuration).
+// UploadOptions configures BuildUploadMeta (from the configuration). In
+// TitleHashtags, Hashtags and Tags, "{streamer}" is replaced by the login.
 type UploadOptions struct {
 	// TitleHashtags are appended to the title while it fits.
 	TitleHashtags []string
 	// Hashtags are appended to the description when the post text lacks them.
 	Hashtags []string
-	// Tags are the base tags; the streamer, the game and the hashtags of the
-	// post text are added after them.
+	// Tags are the base tags, most important first. The editor's search tags
+	// of the moment come before them; the streamer, the game and the hashtags
+	// of the post text after them, all within the 500 character budget.
 	Tags          []string
 	TextLanguage  string
 	AudioLanguage string
 }
+
+// StreamerPlaceholder is replaced by the streamer login in the upload options.
+const StreamerPlaceholder = "{streamer}"
 
 // YouTube limits (developers.google.com/youtube/v3/docs/videos: title up to
 // 100 characters, description up to 5000 bytes, tags up to 500 characters in
@@ -46,21 +51,39 @@ const (
 )
 
 // BuildUploadMeta writes the title, description and tags of a clip's Short:
-// the headline as the title, the post text (which credits the streamer) plus
-// the channel link and the configured hashtags as the description, and the
-// configured tags plus the streamer, the game and the post hashtags as tags.
+// the editor's YouTube title (or the headline) as the title, the post text
+// (which credits the streamer) plus the channel link and the configured
+// hashtags as the description, and the moment's search tags, the configured
+// tags, the streamer, the game and the post hashtags as tags.
 func BuildUploadMeta(c *Clip, o UploadOptions) UploadMeta {
+	expand := func(list []string) []string {
+		out := make([]string, len(list))
+		for i, s := range list {
+			out[i] = strings.ReplaceAll(s, StreamerPlaceholder, c.Streamer)
+		}
+		return out
+	}
+	var search []string
+	if c.Plan != nil {
+		search = c.Plan.SearchTags
+	}
 	return UploadMeta{
-		Title:         uploadTitle(c, o.TitleHashtags),
-		Description:   uploadDescription(c, o.Hashtags),
-		Tags:          uploadTags(o.Tags, c),
+		Title:         uploadTitle(c, expand(o.TitleHashtags)),
+		Description:   uploadDescription(c, expand(o.Hashtags)),
+		Tags:          uploadTags(append(append([]string{}, search...), expand(o.Tags)...), c),
 		TextLanguage:  o.TextLanguage,
 		AudioLanguage: o.AudioLanguage,
 	}
 }
 
 func uploadTitle(c *Clip, hashtags []string) string {
-	title := strings.Join(strings.Fields(stripAngles(c.Headline)), " ")
+	title := ""
+	if c.Plan != nil {
+		title = strings.Join(strings.Fields(stripAngles(c.Plan.YouTubeTitle)), " ")
+	}
+	if title == "" {
+		title = strings.Join(strings.Fields(stripAngles(c.Headline)), " ")
+	}
 	if title == "" {
 		title = "Clipe da live de " + c.Streamer
 	}

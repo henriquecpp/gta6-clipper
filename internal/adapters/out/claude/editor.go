@@ -89,7 +89,7 @@ func tool(strict bool) anthropic.ToolParam {
 	str := func(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
 	t := anthropic.ToolParam{
 		Name:        ToolName,
-		Description: anthropic.String("Submit the chosen cut, the pt-BR headline and captions, and the suggested post text."),
+		Description: anthropic.String("Submit the chosen cut, the pt-BR headline and captions, the suggested post text and the YouTube title and search tags."),
 		InputSchema: anthropic.ToolInputSchemaParam{
 			Properties: map[string]any{
 				"start_s":  num("Início do corte, em segundos relativos à janela"),
@@ -108,10 +108,16 @@ func tool(strict bool) anthropic.ToolParam {
 						},
 					},
 				},
-				"post_text": str("Texto sugerido do post, com crédito ao streamer"),
+				"post_text":     str("Texto sugerido do post, com crédito ao streamer"),
+				"youtube_title": str("Título do Short no YouTube em PT-BR, pensado para busca: GTA 6, o streamer e o gancho"),
+				"search_tags": map[string]any{
+					"type":        "array",
+					"description": "Frases de busca específicas deste momento (PT-BR e inglês), sem hashtags nem vírgulas",
+					"items":       map[string]any{"type": "string"},
+				},
 				"reasoning": str("Uma frase explicando a escolha do corte (para depuração)"),
 			},
-			Required:    []string{"start_s", "end_s", "headline", "captions", "post_text", "reasoning"},
+			Required:    []string{"start_s", "end_s", "headline", "captions", "post_text", "youtube_title", "search_tags", "reasoning"},
 			ExtraFields: map[string]any{"additionalProperties": false},
 		},
 	}
@@ -169,8 +175,9 @@ func userMessage(req domain.EditRequest) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "## Metadata\nstreamer: %s\ngame: %s\nstream title: %s\nspoken language: %s\ncaption language: %s\n\n",
 		req.Streamer, orNone(req.Game), orNone(req.StreamTitle), orNone(req.Language), req.OutputLanguage)
-	fmt.Fprintf(&b, "## Constraints\nwindow duration: %ss\npeak: %ss\ncut duration: between %ss and %ss\npeak tolerance: %ss\nheadline: at most %d characters\ncredit in post_text: %s\n\n",
-		f2(c.WindowDuration), f2(c.Peak), f2(c.MinDuration), f2(c.MaxDuration), f2(c.PeakTolerance), c.HeadlineMaxChars, c.Streamer)
+	fmt.Fprintf(&b, "## Constraints\nwindow duration: %ss\npeak: %ss\ncut duration: between %ss and %ss\npeak tolerance: %ss\nheadline: at most %d characters\ncredit in post_text: %s\nyoutube_title: at most %d characters\nsearch_tags: at most %d, each up to %d characters\n\n",
+		f2(c.WindowDuration), f2(c.Peak), f2(c.MinDuration), f2(c.MaxDuration), f2(c.PeakTolerance), c.HeadlineMaxChars, c.Streamer,
+		domain.MaxYouTubeTitleChars, domain.MaxSearchTags, domain.MaxSearchTagChars)
 	b.WriteString("## Transcript (start-end word)\n")
 	if len(req.Transcript.Words) == 0 {
 		b.WriteString("(no speech detected)\n")
@@ -213,8 +220,10 @@ type toolInput struct {
 		EndS   float64 `json:"end_s"`
 		Text   string  `json:"text"`
 	} `json:"captions"`
-	PostText  string `json:"post_text"`
-	Reasoning string `json:"reasoning"`
+	PostText     string   `json:"post_text"`
+	YouTubeTitle string   `json:"youtube_title"`
+	SearchTags   []string `json:"search_tags"`
+	Reasoning    string   `json:"reasoning"`
 }
 
 // Plan calls the Messages API and decodes the tool call.
@@ -258,6 +267,7 @@ func (e *Editor) Plan(ctx context.Context, req domain.EditRequest) (domain.EditP
 	}
 	p.StartS, p.EndS = *in.StartS, *in.EndS
 	p.Headline, p.PostText, p.Reasoning = in.Headline, in.PostText, in.Reasoning
+	p.YouTubeTitle, p.SearchTags = in.YouTubeTitle, in.SearchTags
 	for _, c := range in.Captions {
 		p.Captions = append(p.Captions, domain.ProposedCaption{StartS: c.StartS, EndS: c.EndS, Text: c.Text})
 	}

@@ -59,7 +59,7 @@ func message(content string) string {
 		`,"stop_reason":"tool_use","stop_sequence":null,"usage":{"input_tokens":6000,"output_tokens":900,"cache_creation_input_tokens":2000,"cache_read_input_tokens":150}}`
 }
 
-const goodInput = `{"start_s":40,"end_s":70.5,"headline":"Ele pulou da ponte!","captions":[{"start_s":41,"end_s":44,"text":"Vocês viram isso?"}],"post_text":"Insano! Clipe da live de streamer_a #gta6","reasoning":"setup e reação"}`
+const goodInput = `{"start_s":40,"end_s":70.5,"headline":"Ele pulou da ponte!","captions":[{"start_s":41,"end_s":44,"text":"Vocês viram isso?"}],"post_text":"Insano! Clipe da live de streamer_a #gta6","youtube_title":"streamer_a pulou da ponte no GTA 6","search_tags":["gta 6 pulo da ponte","gta 6 bridge jump"],"reasoning":"setup e reação"}`
 
 func request() domain.EditRequest {
 	return domain.EditRequest{
@@ -93,7 +93,8 @@ func TestPlanForcedToolChoice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.StartS != 40 || p.EndS != 70.5 || p.Headline != "Ele pulou da ponte!" || len(p.Captions) != 1 || p.ToolUseID != "toolu_1" {
+	if p.StartS != 40 || p.EndS != 70.5 || p.Headline != "Ele pulou da ponte!" || len(p.Captions) != 1 || p.ToolUseID != "toolu_1" ||
+		p.YouTubeTitle != "streamer_a pulou da ponte no GTA 6" || len(p.SearchTags) != 2 {
 		t.Fatalf("proposal = %+v", p)
 	}
 	if usage != (domain.Usage{InputTokens: 6000, OutputTokens: 900, CacheWriteTokens: 2000, CacheReadTokens: 150}) {
@@ -113,7 +114,7 @@ func TestPlanForcedToolChoice(t *testing.T) {
 	}
 	toolDef := b["tools"].([]any)[0].(map[string]any)
 	schema := toolDef["input_schema"].(map[string]any)
-	if toolDef["name"] != "submit_edit_plan" || len(schema["required"].([]any)) != 6 || schema["additionalProperties"] != false {
+	if toolDef["name"] != "submit_edit_plan" || len(schema["required"].([]any)) != 8 || schema["additionalProperties"] != false {
 		t.Fatalf("tool = %v", toolDef)
 	}
 	if _, strict := toolDef["strict"]; strict {
@@ -121,7 +122,8 @@ func TestPlanForcedToolChoice(t *testing.T) {
 	}
 	user := b["messages"].([]any)[0].(map[string]any)
 	text := user["content"].([]any)[0].(map[string]any)["text"].(string)
-	for _, want := range []string{"streamer: streamer_a", "peak: 60.00s", "40.00-40.40 no | 40.50-41.00 way", "1 4.0 3.0 2", "between 15.00s and 60.00s"} {
+	for _, want := range []string{"streamer: streamer_a", "peak: 60.00s", "40.00-40.40 no | 40.50-41.00 way", "1 4.0 3.0 2", "between 15.00s and 60.00s",
+		"youtube_title: at most 85 characters", "search_tags: at most 12"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("user message lacks %q:\n%s", want, text)
 		}

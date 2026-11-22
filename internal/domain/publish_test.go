@@ -91,3 +91,34 @@ func TestCleanHashtag(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildUploadMetaUsesTheEditorSearchMetadata(t *testing.T) {
+	c := publishClip()
+	c.PostText = "Fuga absurda! Clipe da live de alanzoka na Twitch #GTA6"
+	c.Plan = &EditPlan{
+		YouTubeTitle: "alanzoka foge da polícia de moto no GTA 6 e cai no rio 😂",
+		SearchTags:   []string{"gta 6 fuga da polícia", "gta 6 police chase", "GTA 6"},
+	}
+	m := BuildUploadMeta(c, UploadOptions{
+		TitleHashtags: []string{"#GTA6", "#Shorts"},
+		Hashtags:      []string{"#GTA6", "#GTAVI", "#{streamer}"},
+		Tags:          []string{"{streamer} gta 6", "GTA 6", "GTA VI"},
+	})
+	if want := "alanzoka foge da polícia de moto no GTA 6 e cai no rio 😂 #GTA6 #Shorts"; m.Title != want {
+		t.Errorf("title = %q, want %q", m.Title, want)
+	}
+	if !strings.HasSuffix(m.Description, "\n\n#GTAVI #alanzoka") {
+		t.Errorf("description = %q", m.Description)
+	}
+	// The moment's tags come first, then the configured ones (expanded), then
+	// the streamer, the game and the post hashtags.
+	want := []string{"gta 6 fuga da polícia", "gta 6 police chase", "GTA 6", "alanzoka gta 6", "GTA VI", "alanzoka", "Grand Theft Auto VI", "GTA6"}
+	if !slices.Equal(m.Tags, want) {
+		t.Errorf("tags = %q\nwant %q", m.Tags, want)
+	}
+	// Without the editor's title the headline is used.
+	c.Plan.YouTubeTitle = ""
+	if m := BuildUploadMeta(c, UploadOptions{}); m.Title != "Ele fugiu da polícia de moto e caiu no rio 😂" {
+		t.Errorf("fallback title = %q", m.Title)
+	}
+}

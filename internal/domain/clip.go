@@ -293,6 +293,7 @@ func (c *Clip) Clone() *Clip {
 	if c.Plan != nil {
 		plan := *c.Plan
 		plan.Captions = slices.Clone(c.Plan.Captions)
+		plan.SearchTags = slices.Clone(c.Plan.SearchTags)
 		cp.Plan = &plan
 	}
 	if c.StateTimes != nil {
