@@ -294,7 +294,7 @@ Ele captura por 60 s, mostra frames de áudio/fala, retém 20 s e estima a latê
 | Logs | `task logs` (`scripts\logs.ps1 -Service app`) |
 | Backup do banco | `task db:backup` (`scripts\backup.ps1`) → `.\backups\` |
 | Reautorizar a Twitch | `task auth:twitch` |
-| Autorizar/reautorizar o canal do YouTube | `task auth:youtube` (depois `task up` para o app recarregar) |
+| Autorizar/reautorizar o canal do YouTube | `task auth:youtube` (depois `docker compose up -d --force-recreate app`) |
 | Testar transcrição + render sem Claude | `docker compose run --rm --no-deps app dryrun` (lista clipes com mídia retida) e `... app dryrun <clip_id>` |
 
 - **`dryrun`:** transcreve a janela retida de um clipe real, monta um corte sem IA (≈30 s em volta do pico,
@@ -350,21 +350,29 @@ enviado sem esse toque. O vídeo já sai em 9:16 com até 3 minutos, então o pr
   streamer, "não é conteúdo para crianças", privacidade `youtube.privacy` (`public` por padrão; use
   `unlisted` ou `private` para testar).
 
-**Configuração (uma vez):**
-1. Em <https://console.cloud.google.com>, crie um projeto e ative a **YouTube Data API v3**
-   (APIs e serviços → Biblioteca).
-2. Configure a **tela de consentimento OAuth** (público **Externo**) e adicione sua conta como usuário de teste.
-   **Importante:** enquanto o app estiver no status **Testing**, o Google faz a autorização expirar em
-   **7 dias**. Para não precisar reautorizar toda semana, clique em **Publicar app** (status "Em produção").
-   Para uso pessoal não é preciso passar pela verificação; o Google mostra um aviso de "app não verificado"
-   na hora de autorizar, que você pode ignorar.
-3. Em **Credenciais → Criar credenciais → ID do cliente OAuth**, escolha o tipo
-   **"TVs e dispositivos de entrada limitada"** e copie o ID e a chave secreta para `YOUTUBE_CLIENT_ID` e
-   `YOUTUBE_CLIENT_SECRET` no `.env`.
-4. Rode `task auth:youtube`: o comando mostra um endereço (`https://www.google.com/device`) e um código.
-   Abra no navegador, digite o código, **escolha a conta/canal** onde os Shorts vão sair e autorize. No fim ele
-   mostra o nome do canal autorizado (confira!) e salva o token no volume `clipper-data`.
-5. `task up` para o app recarregar. O log mostra `publishing on YouTube enabled`.
+**Configuração (uma vez), em modo pessoal:**
+
+O **modo pessoal** do Google Auth Platform serve para apps que só você usa. Ele não pede domínio, política de
+privacidade nem verificação, não mostra o aviso de "app não verificado" e a autorização não expira em 7
+dias. Só a conta que criou o projeto consegue autorizar.
+1. Abra <https://console.cloud.google.com/auth/overview/personal> com a conta dona do canal. O Google cria um
+   projeto novo em modo pessoal (um projeto "Externo" já existente não pode ser convertido).
+2. Com esse projeto selecionado no topo, ative a **YouTube Data API v3**:
+   <https://console.cloud.google.com/apis/library/youtube.googleapis.com>.
+3. Em <https://console.cloud.google.com/auth/clients> → **Criar cliente**, escolha **Desktop app**
+   ("App para computador") e copie o ID e a chave secreta para `YOUTUBE_CLIENT_ID` e `YOUTUBE_CLIENT_SECRET`
+   no `.env`. Copie a chave na hora: o console pode não mostrá-la de novo.
+4. Rode `task auth:youtube`. Ele mostra um endereço longo do Google: abra no navegador **deste PC**, escolha
+   a conta/canal onde os Shorts vão sair e autorize. O Google devolve a autorização para
+   `http://127.0.0.1:8765` (porta publicada só durante o comando). O terminal mostra o nome do canal
+   autorizado (confira!) e salva o token no volume `clipper-data`.
+5. `docker compose up -d --force-recreate app` para o app recarregar o `.env` e o token. O log mostra
+   `publishing on YouTube enabled`.
+
+Alternativa: um projeto **Externo** em status "Teste", com a sua conta em **Usuários de teste**. Funciona sem
+domínio, mas a autorização expira a cada **7 dias**, e para publicar o app ("Em produção") o Google exige
+página inicial, política de privacidade e domínio verificado. Com um cliente do tipo "TVs e dispositivos de
+entrada limitada", use `task auth:youtube -- -device` (código digitado em `https://www.google.com/device`).
 
 **Limites e comportamento:**
 - **Cota:** a documentação atual da YouTube Data API dá **100 uploads por dia** por projeto (bucket "Video
@@ -372,8 +380,9 @@ enviado sem esse toque. O vídeo já sai em 9:16 com até 3 minutos, então o pr
 - O envio usa o protocolo de **upload resumível**: se a conexão cair no meio, o app pergunta ao YouTube quanto
   já chegou e continua de onde parou (até 5 tentativas, `youtube.upload_timeout` no total). Ele **nunca**
   recomeça um upload do zero sozinho, para não publicar o mesmo vídeo duas vezes.
-- Escopo pedido: `https://www.googleapis.com/auth/youtube` (o fluxo para dispositivos não aceita o escopo
-  só de upload). O token fica em `/data/youtube_token.json` (modo 0600), nunca no repositório.
+- Escopos pedidos: `youtube.upload` (enviar vídeos) e `youtube.readonly` (ler o nome do canal para você
+  conferir). O fluxo `-device` só aceita `youtube` (escopo completo). O token fica em
+  `/data/youtube_token.json` (modo 0600), nunca no repositório.
 - Se a autorização for revogada ou expirar, a mensagem mostra o erro com a instrução de rodar
   `task auth:youtube` de novo.
 

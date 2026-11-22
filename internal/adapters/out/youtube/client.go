@@ -21,15 +21,23 @@ import (
 	"github.com/henriquecpp/gta6-clipper/internal/app"
 )
 
-// Scope is the OAuth scope requested. The device flow accepts only the
-// youtube and youtube.readonly YouTube scopes (not youtube.upload), and
-// videos.insert accepts youtube (developers.google.com/identity/protocols/oauth2/limited-input-device).
+// Scope is the OAuth scope of the device flow, which accepts only the youtube
+// and youtube.readonly YouTube scopes (not youtube.upload); videos.insert
+// accepts youtube (developers.google.com/identity/protocols/oauth2/limited-input-device).
 const Scope = "https://www.googleapis.com/auth/youtube"
+
+// DesktopScopes are the narrower scopes of the desktop (loopback) flow:
+// upload videos and read the channel, to confirm which one was authorized.
+var DesktopScopes = []string{
+	"https://www.googleapis.com/auth/youtube.upload",
+	"https://www.googleapis.com/auth/youtube.readonly",
+}
 
 // ShortsURL is the prefix of the link of a published Short.
 const ShortsURL = "https://www.youtube.com/shorts/"
 
 const (
+	defaultAuthURL   = "https://accounts.google.com/o/oauth2/v2/auth"
 	defaultOAuthURL  = "https://oauth2.googleapis.com"
 	defaultAPIURL    = "https://www.googleapis.com/youtube/v3"
 	defaultUploadURL = "https://www.googleapis.com/upload/youtube/v3"
@@ -57,6 +65,7 @@ type Client struct {
 	cfg       Config
 	http      *http.Client // OAuth and API calls (with a timeout)
 	upload    *http.Client // uploads, bounded by the context instead
+	authURL   string       // browser authorization page (desktop flow)
 	oauthURL  string
 	apiURL    string
 	uploadURL string
@@ -98,6 +107,7 @@ func New(cfg Config, opts ...Option) *Client {
 		cfg:       cfg,
 		http:      &http.Client{Timeout: 30 * time.Second},
 		upload:    &http.Client{},
+		authURL:   defaultAuthURL,
 		oauthURL:  defaultOAuthURL,
 		apiURL:    defaultAPIURL,
 		uploadURL: defaultUploadURL,

@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -276,9 +278,17 @@ func backup(args []string, stdout io.Writer) error {
 	return nil
 }
 
-// youtubeAuth authorizes the YouTube channel once (OAuth for limited-input
-// devices) and shows which channel the videos will be published to.
-func youtubeAuth(_ []string, stdout io.Writer) error {
+// youtubeAuth authorizes the YouTube channel once and shows which channel the
+// videos will be published to. By default it uses an OAuth client of type
+// "Desktop app" with a loopback redirect on -port (published to the host by
+// `task auth:youtube`); -device uses a "TVs and Limited Input devices" client.
+func youtubeAuth(args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("youtube-auth", flag.ContinueOnError)
+	device := fs.Bool("device", false, `use an OAuth client of type "TVs and Limited Input devices" (device code)`)
+	port := fs.Int("port", 8765, "loopback port of the desktop flow (must be published to the host)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	cfg, err := loadConfig()
 	if err != nil {
 		return err
@@ -289,10 +299,23 @@ func youtubeAuth(_ []string, stdout io.Writer) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	yt := newYouTube(cfg, slog.New(slog.DiscardHandler))
-	err = yt.DeviceFlow(ctx, func(verificationURL, code string) {
-		_, _ = fmt.Fprintf(stdout, "Abra %s e digite o código: %s\nEscolha a conta/canal onde os Shorts serão publicados. Aguardando...\n",
-			verificationURL, code)
-	})
+	if *device {
+		err = yt.DeviceFlow(ctx, func(verificationURL, code string) {
+			_, _ = fmt.Fprintf(stdout, "Abra %s e digite o código: %s\nEscolha a conta/canal onde os Shorts serão publicados. Aguardando...\n",
+				verificationURL, code)
+		})
+	} else {
+		// Inside the container the listener takes every interface; the browser
+		// on the host reaches it through the published 127.0.0.1 port.
+		var ln net.Listener
+		ln, err = (&net.ListenConfig{}).Listen(ctx, "tcp", fmt.Sprintf(":%d", *port))
+		if err != nil {
+			return fmt.Errorf("listen on port %d: %w", *port, err)
+		}
+		err = yt.DesktopFlow(ctx, ln, fmt.Sprintf("http://127.0.0.1:%d", *port), func(authURL string) {
+			_, _ = fmt.Fprintf(stdout, "Abra este endereço no navegador deste PC, escolha a conta/canal onde os Shorts serão publicados e autorize:\n\n%s\n\nAguardando a autorização...\n", authURL)
+		})
+	}
 	if err != nil {
 		return err
 	}
