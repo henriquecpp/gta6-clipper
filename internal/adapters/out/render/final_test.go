@@ -54,14 +54,14 @@ func TestFilterGraphsGolden(t *testing.T) {
 	stack := domain.StackRegions{Facecam: domain.Rect{X: 0.7, Y: 0, W: 0.3, H: 0.3}, Gameplay: domain.Rect{X: 0, Y: 0, W: 1, H: 1}}
 	var b strings.Builder
 	for _, l := range []domain.Layout{domain.LayoutBlur, domain.LayoutStack, domain.LayoutCrop} {
-		b.WriteString(string(l) + ": " + filterGraph(l, stack, 1080, 1920, 30, "/output/.x.ass") + "\n")
+		b.WriteString(string(l) + ": " + filterGraph(l, stack, 1080, 1920, 30, ms(39650), ms(70500), "/output/.x.ass") + "\n")
 	}
 	golden(t, "render_layouts", b.String())
 }
 
 func TestFinalArgsGolden(t *testing.T) {
 	spec := sampleSpec()
-	graph := filterGraph(spec.Layout, spec.Stack, 1080, 1920, 30, "/output/.x.ass")
+	graph := filterGraph(spec.Layout, spec.Stack, 1080, 1920, 30, spec.Start, spec.End, "/output/.x.ass")
 	golden(t, "render_final_nvenc", lines(finalArgs("/pending/c.ts", "/output/c.mp4", graph, spec, EncoderNVENC, 4, 1)))
 	golden(t, "render_final_x264", lines(finalArgs("/pending/c.ts", "/output/c.mp4", graph, spec, EncoderX264, 4, 0.8)))
 }

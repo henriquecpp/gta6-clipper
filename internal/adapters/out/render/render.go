@@ -141,14 +141,14 @@ func secs(d time.Duration) string { return strconv.FormatFloat(d.Seconds(), 'f',
 // previewArgs cuts [start, start+duration] of src into a small vertical MP4
 // with the same layout as the final video (graph from filterGraph).
 func previewArgs(src, out, graph string, spec domain.PreviewSpec, encoder string, threads int) []string {
-	args := []string{
-		"-hide_banner", "-loglevel", "error", "-y",
-		"-ss", secs(spec.Start),
+	args := append([]string{"-hide_banner", "-loglevel", "error", "-y"}, seekArgs(spec.Start)...)
+	args = append(args,
 		"-i", src,
 		"-t", secs(spec.Duration),
 		"-filter_complex", graph,
 		"-map", "[v]", "-map", "0:a:0?",
-	}
+		"-af", audioFilter(spec.Start, spec.Start+spec.Duration),
+	)
 	if encoder == EncoderNVENC {
 		args = append(args, "-c:v", EncoderNVENC, "-preset", "p4", "-rc", "vbr", "-cq", "30", "-b:v", "0",
 			"-maxrate", "1500k", "-bufsize", "3000k")
@@ -177,7 +177,7 @@ func (r *Renderer) Preview(ctx context.Context, src domain.MediaRef, spec domain
 		fps = 30
 	}
 	out := previewPath(src)
-	graph := filterGraph(spec.Layout, spec.Stack, spec.Width, spec.Height, fps, "")
+	graph := filterGraph(spec.Layout, spec.Stack, spec.Width, spec.Height, fps, spec.Start, spec.Start+spec.Duration, "")
 	if _, err := r.run(ctx, previewArgs(string(src), out, graph, spec, r.encoder, r.cfg.Threads)...); err != nil {
 		_ = os.Remove(out) // partial output
 		return "", fmt.Errorf("render preview of %s: %w", src, err)

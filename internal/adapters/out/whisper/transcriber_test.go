@@ -126,7 +126,8 @@ func TestTranscriberLimitsConcurrency(t *testing.T) {
 	if maxSeen.Load() != 1 {
 		t.Fatalf("max concurrent requests = %d, want 1", maxSeen.Load())
 	}
-	if got := strings.Join(extractArgs("/p/a.ts"), " "); !strings.Contains(got, "-ar 16000") || !strings.Contains(got, "-ac 1") {
+	if got := strings.Join(extractArgs("/p/a.ts"), " "); !strings.Contains(got, "-ar 16000") || !strings.Contains(got, "-ac 1") ||
+		!strings.Contains(got, "aresample=async=1:first_pts=0") {
 		t.Fatalf("extract args = %s", got)
 	}
 }

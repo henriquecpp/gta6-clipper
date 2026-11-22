@@ -58,8 +58,10 @@ func NewTranscriber(c *Client, opts ...TranscriberOption) *Transcriber {
 }
 
 // extractArgs decodes the audio track to 16 kHz mono 16-bit WAV on stdout.
+// aresample pads the start and fills timestamp gaps with silence, so word
+// times stay on the timeline the renderer cuts (relative to the file start).
 func extractArgs(src string) []string {
-	return []string{"-hide_banner", "-loglevel", "error", "-i", src, "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", "-f", "wav", "pipe:1"}
+	return []string{"-hide_banner", "-loglevel", "error", "-i", src, "-vn", "-af", "aresample=async=1:first_pts=0", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", "-f", "wav", "pipe:1"}
 }
 
 // Transcribe returns the words of the media with times relative to its start.

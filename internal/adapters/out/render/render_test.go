@@ -40,7 +40,8 @@ func lines(a []string) string { return strings.Join(a, "\n") + "\n" }
 var previewSpec = domain.PreviewSpec{Start: 33*time.Second + 333*time.Millisecond, Duration: 40 * time.Second,
 	Width: 480, Height: 854, FPS: 30, Layout: domain.LayoutBlur, MaxBytes: 45 << 20}
 
-var previewGraph = filterGraph(previewSpec.Layout, previewSpec.Stack, previewSpec.Width, previewSpec.Height, previewSpec.FPS, "")
+var previewGraph = filterGraph(previewSpec.Layout, previewSpec.Stack, previewSpec.Width, previewSpec.Height, previewSpec.FPS,
+	previewSpec.Start, previewSpec.Start+previewSpec.Duration, "")
 
 func TestPreviewArgsGolden(t *testing.T) {
 	golden(t, "render_preview_nvenc", lines(previewArgs("/pending/s1_1_2.ts", "/pending/s1_1_2.preview.mp4", previewGraph, previewSpec, EncoderNVENC, 4)))
