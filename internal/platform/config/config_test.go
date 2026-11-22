@@ -197,6 +197,9 @@ func TestYouTubeDefaultsAndSecrets(t *testing.T) {
 		!y.NotifySubscribers || y.MadeForKids || y.TokenFile != "/data/youtube_token.json" || len(y.Tags) == 0 || y.TitleHashtags[0] != "#GTA6" {
 		t.Fatalf("youtube = %+v", y)
 	}
+	if cfg.Editor.MaxTokens != 16000 {
+		t.Fatalf("editor.max_tokens default = %d", cfg.Editor.MaxTokens)
+	}
 	cfg, err = Parse([]byte("youtube: {privacy: unlisted, notify_subscribers: false, tags: ['GTA 6 Online']}"), env(nil))
 	if err != nil {
 		t.Fatal(err)

@@ -46,7 +46,9 @@ func Defaults() *Config {
 		},
 		Whisper: Whisper{URL: "http://whisper:8080", Timeout: dur(5 * time.Minute)},
 		Editor: Editor{
-			MaxTokens:         2000,
+			// Thinking tokens count toward max_tokens on current models; only
+			// the tokens actually generated are paid.
+			MaxTokens:         16000,
 			Timeout:           dur(90 * time.Second),
 			MaxCostPerClipUSD: 0.05,
 			ToolChoice:        "tool",

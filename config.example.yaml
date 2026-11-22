@@ -55,7 +55,7 @@ whisper:
   timeout: 5m
 
 editor:
-  max_tokens: 2000
+  max_tokens: 16000         # thinking counts toward it; only generated tokens are paid
   timeout: 90s
   max_cost_per_clip_usd: 0.05
   tool_choice: tool         # tool (forced) | auto (strict tool, for models that reject forced tool_choice)
