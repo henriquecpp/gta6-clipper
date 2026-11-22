@@ -26,8 +26,13 @@ type ProduceConfig struct {
 	Height   int
 	FPS      int
 	MaxBytes int64
-	// Streamers gives the layout of each login.
+	// Streamers gives the layout and the spoken language of each login.
 	Streamers map[string]domain.Streamer
+	// GameLanguage is the language the game's characters speak ("en" for GTA
+	// VI). For streamers who speak another language, the audio is also
+	// transcribed in it so the editor can tell game dialogue from the
+	// streamer. Empty disables the second pass.
+	GameLanguage string
 }
 
 // ProduceFinalClip turns an approved clip into the delivered vertical video:
@@ -119,8 +124,9 @@ func (u *ProduceFinalClip) begin(ctx context.Context, id domain.ClipID) (*domain
 // edit transcribes, plans (or reuses the saved plan) and renders; it returns
 // the clip in the rendered state.
 func (u *ProduceFinalClip) edit(ctx context.Context, c *domain.Clip, log *slog.Logger) (*domain.Clip, error) {
+	lang := u.cfg.Streamers[c.Streamer].Language
 	t0 := u.clock.Now()
-	transcript, err := u.transcriber.Transcribe(ctx, c.SourceMedia)
+	transcript, err := u.transcriber.Transcribe(ctx, c.SourceMedia, lang)
 	u.metrics.StageDuration("transcribe", u.clock.Now().Sub(t0))
 	if err != nil {
 		return nil, fmt.Errorf("transcribe: %w", err)
@@ -137,7 +143,8 @@ func (u *ProduceFinalClip) edit(ctx context.Context, c *domain.Clip, log *slog.L
 
 	plan := c.Plan
 	if plan == nil {
-		p, usage, err := u.plan(ctx, c, transcript, cons)
+		game := u.gameTranscript(ctx, c, lang, log)
+		p, usage, err := u.plan(ctx, c, transcript, game, cons)
 		cost := usage.Cost(u.cfg.Pricing)
 		u.metrics.EditorUsage(cost, usage)
 		if err != nil {
@@ -203,12 +210,29 @@ func (u *ProduceFinalClip) edit(ctx context.Context, c *domain.Clip, log *slog.L
 	return out, nil
 }
 
+// gameTranscript transcribes the audio again in the game's language when the
+// streamer speaks another one. It only helps the editor tell game dialogue
+// apart, so a failure is logged and the edit goes on without it.
+func (u *ProduceFinalClip) gameTranscript(ctx context.Context, c *domain.Clip, lang string, log *slog.Logger) domain.Transcript {
+	if u.cfg.GameLanguage == "" || lang == "" || lang == u.cfg.GameLanguage {
+		return domain.Transcript{}
+	}
+	t0 := u.clock.Now()
+	t, err := u.transcriber.Transcribe(ctx, c.SourceMedia, u.cfg.GameLanguage)
+	u.metrics.StageDuration("transcribe", u.clock.Now().Sub(t0))
+	if err != nil {
+		log.Warn("game language transcript failed; editing without it", slog.String("err", err.Error()))
+		return domain.Transcript{}
+	}
+	return t
+}
+
 // plan calls the editor and validates; an invalid answer gets exactly one
 // retry with the problem sent back to the model.
-func (u *ProduceFinalClip) plan(ctx context.Context, c *domain.Clip, t domain.Transcript, cons domain.EditConstraints) (domain.EditPlan, domain.Usage, error) {
+func (u *ProduceFinalClip) plan(ctx context.Context, c *domain.Clip, t, game domain.Transcript, cons domain.EditConstraints) (domain.EditPlan, domain.Usage, error) {
 	req := domain.EditRequest{
 		ClipID: c.ID, Streamer: c.Streamer, Game: c.Game, StreamTitle: c.StreamTitle,
-		Language: t.Language, OutputLanguage: u.cfg.OutputLanguage, Transcript: t,
+		Language: t.Language, OutputLanguage: u.cfg.OutputLanguage, Transcript: t, GameTranscript: game,
 		Signals: relativeSignals(c), ViewerClipTitles: c.Moment.ClipTitles, Constraints: cons,
 	}
 	var total domain.Usage

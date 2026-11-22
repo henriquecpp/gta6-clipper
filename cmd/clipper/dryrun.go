@@ -78,9 +78,9 @@ func dryRun(args []string, out io.Writer) error {
 	}
 
 	tr := whisper.NewTranscriber(whisper.NewClient(cfg.Whisper.URL, &http.Client{Timeout: cfg.Whisper.Timeout.D()}),
-		whisper.WithTimeout(cfg.Whisper.Timeout.D()))
+		whisper.WithTimeout(cfg.Whisper.Timeout.D()), whisper.WithBeamSize(cfg.Whisper.BeamSize))
 	t0 := time.Now()
-	transcript, err := tr.Transcribe(ctx, c.SourceMedia)
+	transcript, err := tr.Transcribe(ctx, c.SourceMedia, streamerMap(cfg)[c.Streamer].Language)
 	if err != nil {
 		return fmt.Errorf("transcribe: %w", err)
 	}

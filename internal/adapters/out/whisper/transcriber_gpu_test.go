@@ -27,8 +27,8 @@ func TestGPUTranscribeRealWhisper(t *testing.T) {
 		case <-time.After(2 * time.Second):
 		}
 	}
-	tr := NewTranscriber(c, WithTimeout(2*time.Minute))
-	got, err := tr.Transcribe(ctx, "../../../../testdata/speech/pt_sample.wav")
+	tr := NewTranscriber(c, WithTimeout(2*time.Minute), WithBeamSize(5))
+	got, err := tr.Transcribe(ctx, "../../../../testdata/speech/pt_sample.wav", "pt")
 	if err != nil {
 		t.Fatal(err)
 	}

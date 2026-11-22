@@ -116,6 +116,9 @@ func (c *Config) Validate() error {
 		add("whisper.url must be an absolute URL (got %q)", c.Whisper.URL)
 	}
 	pos("whisper.timeout", c.Whisper.Timeout)
+	if c.Whisper.BeamSize < 0 || c.Whisper.BeamSize > 16 {
+		add("whisper.beam_size must be in [0, 16] (got %d)", c.Whisper.BeamSize)
+	}
 
 	e := c.Editor
 	if e.MaxTokens < 256 || e.MaxTokens > 64000 {

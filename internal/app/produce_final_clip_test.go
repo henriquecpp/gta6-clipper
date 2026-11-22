@@ -367,3 +367,47 @@ func TestProduceQueueGraceExpires(t *testing.T) {
 		}
 	})
 }
+
+func TestProduceTranscribesInTheStreamerLanguage(t *testing.T) {
+	ctx := context.Background()
+	game := domain.Transcript{Language: "en", Words: []domain.Word{{Text: "Love", Start: time.Second, End: 2 * time.Second}}}
+	for _, tc := range []struct {
+		name      string
+		lang      string
+		gameErr   error
+		wantLangs []string
+		wantGame  bool
+	}{
+		{name: "pt streamer gets the game-language pass", lang: "pt", wantLangs: []string{"pt", "en"}, wantGame: true},
+		{name: "en streamer needs no second pass", lang: "en", wantLangs: []string{"en"}},
+		{name: "second pass failure is not fatal", lang: "pt", gameErr: errors.New("whisper busy"), wantLangs: []string{"pt", "en"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newProduceEnv(t)
+			e.produce = app.NewProduceFinalClip(app.ProduceConfig{
+				MinDuration: 15 * time.Second, MaxDuration: 60 * time.Second, PeakTolerance: 5 * time.Second,
+				HeadlineMaxChars: 60, SnapMargin: 150 * time.Millisecond, Pricing: pricing, MaxCost: 50_000,
+				Width: 1080, Height: 1920, FPS: 30, MaxBytes: 45 << 20, GameLanguage: "en",
+				Streamers: map[string]domain.Streamer{"streamer_a": {Login: "streamer_a", Language: tc.lang}},
+			}, e.repo, e.trans, e.editor, e.renderer, e.notifier, e.media, e.clock, discardLog(), e.metrics, nil)
+			e.trans.ByLanguage = map[string]fakes.TranscriptAnswer{"en": {Transcript: game, Err: tc.gameErr}}
+			if tc.lang == "en" {
+				e.trans.ByLanguage = nil
+			}
+			e.approved(t, "c1")
+			if err := e.produce.Execute(ctx, "c1"); err != nil {
+				t.Fatal(err)
+			}
+			if strings.Join(e.trans.Languages, ",") != strings.Join(tc.wantLangs, ",") {
+				t.Fatalf("languages = %v, want %v", e.trans.Languages, tc.wantLangs)
+			}
+			req := e.editor.Requests[0]
+			if got := len(req.GameTranscript.Words) > 0; got != tc.wantGame {
+				t.Fatalf("game transcript sent = %v, want %v", got, tc.wantGame)
+			}
+			if e.get(t, "c1").State != domain.StateDelivered {
+				t.Fatal("clip not delivered")
+			}
+		})
+	}
+}

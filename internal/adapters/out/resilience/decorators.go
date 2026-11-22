@@ -116,9 +116,9 @@ func NewTranscriber(t app.Transcriber, policy Policy, deps Deps) *Transcriber {
 }
 
 // Transcribe implements app.Transcriber.
-func (d *Transcriber) Transcribe(ctx context.Context, src domain.MediaRef) (domain.Transcript, error) {
+func (d *Transcriber) Transcribe(ctx context.Context, src domain.MediaRef, language string) (domain.Transcript, error) {
 	return call(ctx, d.deps, d.Policy, "transcriber", "transcribe", func(ctx context.Context) (domain.Transcript, error) {
-		return d.Next.Transcribe(ctx, src)
+		return d.Next.Transcribe(ctx, src, language)
 	})
 }
 

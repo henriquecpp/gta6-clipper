@@ -63,7 +63,7 @@ func fakeExtract(context.Context, string) ([]byte, error) { return []byte("RIFF.
 func TestTranscribe(t *testing.T) {
 	srv := fakeWhisper(t, http.StatusOK, nil, nil)
 	tr := NewTranscriber(NewClient(srv.URL, srv.Client()), withExtractor(fakeExtract), WithTimeout(time.Minute), WithTimestampSource(TimestampsToken))
-	got, err := tr.Transcribe(context.Background(), "/pending/x.ts")
+	got, err := tr.Transcribe(context.Background(), "/pending/x.ts", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestTranscribe(t *testing.T) {
 func TestTranscribeErrors(t *testing.T) {
 	loading := fakeWhisper(t, http.StatusServiceUnavailable, nil, nil)
 	tr := NewTranscriber(NewClient(loading.URL, loading.Client()), withExtractor(fakeExtract))
-	if _, err := tr.Transcribe(context.Background(), "x"); !errors.Is(err, ErrUnavailable) {
+	if _, err := tr.Transcribe(context.Background(), "x", ""); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("503 err = %v", err)
 	}
 	if err := NewClient(loading.URL, nil).Health(context.Background()); !errors.Is(err, ErrUnavailable) {
@@ -86,24 +86,24 @@ func TestTranscribeErrors(t *testing.T) {
 	}
 	broken := fakeWhisper(t, http.StatusInternalServerError, nil, nil)
 	tr = NewTranscriber(NewClient(broken.URL, broken.Client()), withExtractor(fakeExtract))
-	if _, err := tr.Transcribe(context.Background(), "x"); err == nil || errors.Is(err, ErrUnavailable) {
+	if _, err := tr.Transcribe(context.Background(), "x", ""); err == nil || errors.Is(err, ErrUnavailable) {
 		t.Fatalf("500 err = %v", err)
 	}
 	down := NewTranscriber(NewClient("http://127.0.0.1:1", nil), withExtractor(fakeExtract))
-	if _, err := down.Transcribe(context.Background(), "x"); !errors.Is(err, ErrUnavailable) {
+	if _, err := down.Transcribe(context.Background(), "x", ""); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("connection refused err = %v", err)
 	}
 	noAudio := NewTranscriber(NewClient(broken.URL, nil), withExtractor(func(context.Context, string) ([]byte, error) {
 		return nil, errors.New("no audio stream")
 	}))
-	if _, err := noAudio.Transcribe(context.Background(), "x"); err == nil || !strings.Contains(err.Error(), "extract audio") {
+	if _, err := noAudio.Transcribe(context.Background(), "x", ""); err == nil || !strings.Contains(err.Error(), "extract audio") {
 		t.Fatalf("extract err = %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	busy := NewTranscriber(NewClient(broken.URL, nil), withExtractor(fakeExtract))
 	busy.sem <- struct{}{}
-	if _, err := busy.Transcribe(ctx, "x"); !errors.Is(err, context.Canceled) {
+	if _, err := busy.Transcribe(ctx, "x", ""); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled err = %v", err)
 	}
 }
@@ -117,7 +117,7 @@ func TestTranscriberLimitsConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if _, err := tr.Transcribe(context.Background(), "x"); err != nil {
+			if _, err := tr.Transcribe(context.Background(), "x", ""); err != nil {
 				t.Error(err)
 			}
 		}()
@@ -129,5 +129,40 @@ func TestTranscriberLimitsConcurrency(t *testing.T) {
 	if got := strings.Join(extractArgs("/p/a.ts"), " "); !strings.Contains(got, "-ar 16000") || !strings.Contains(got, "-ac 1") ||
 		!strings.Contains(got, "aresample=async=1:first_pts=0") {
 		t.Fatalf("extract args = %s", got)
+	}
+}
+
+func TestTranscribeForcedLanguageAndBeam(t *testing.T) {
+	var got map[string]string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		got = map[string]string{}
+		for k := range r.MultipartForm.Value {
+			got[k] = r.FormValue(k)
+		}
+		_, _ = w.Write([]byte(sampleVerbose)) // reports "en" probabilities
+	}))
+	t.Cleanup(srv.Close)
+	tr := NewTranscriber(NewClient(srv.URL, srv.Client()), withExtractor(fakeExtract), WithBeamSize(5))
+	tx, err := tr.Transcribe(context.Background(), "/pending/x.ts", "pt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["language"] != "pt" || got["beam_size"] != "5" || got["best_of"] != "5" {
+		t.Fatalf("form = %v", got)
+	}
+	if tx.Language != "pt" {
+		t.Fatalf("forced language reported as %q", tx.Language)
+	}
+	// Greedy and auto: no beam fields, detected language kept.
+	tr = NewTranscriber(NewClient(srv.URL, srv.Client()), withExtractor(fakeExtract))
+	if tx, err := tr.Transcribe(context.Background(), "/pending/x.ts", ""); err != nil || tx.Language != "en" {
+		t.Fatalf("auto = %q, %v", tx.Language, err)
+	}
+	if got["language"] != "auto" || got["beam_size"] != "" {
+		t.Fatalf("form = %v", got)
 	}
 }

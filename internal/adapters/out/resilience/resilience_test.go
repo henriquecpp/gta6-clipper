@@ -114,7 +114,7 @@ func TestDecoratorGivesUpAndSkipsPermanentErrors(t *testing.T) {
 
 	tr := &fakes.Transcriber{Err: errors.New("whisper server unavailable")}
 	dt := NewTranscriber(tr, Policy{Attempts: 3, Base: time.Second, Max: time.Second}, deps)
-	if _, err := dt.Transcribe(context.Background(), "x"); err == nil || tr.Calls != 3 {
+	if _, err := dt.Transcribe(context.Background(), "x", "pt"); err == nil || tr.Calls != 3 {
 		t.Fatalf("err = %v calls = %d", err, tr.Calls)
 	}
 
@@ -144,7 +144,7 @@ func TestDecoratorGivesUpAndSkipsPermanentErrors(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	tr2 := &fakes.Transcriber{Err: errors.New("down")}
-	if _, err := NewTranscriber(tr2, WhisperPolicy, deps).Transcribe(ctx, "x"); err == nil {
+	if _, err := NewTranscriber(tr2, WhisperPolicy, deps).Transcribe(ctx, "x", ""); err == nil {
 		t.Fatal("expected error")
 	}
 }

@@ -67,8 +67,11 @@ type Renderer interface {
 }
 
 // Transcriber transcribes retained media locally (whisper.cpp on the GPU).
+// language is the ISO code of the speech to transcribe ("" = detect). Forcing
+// it matters: detection looks only at the start of the audio, and a game
+// cutscene in English there turns Portuguese speech into made-up English.
 type Transcriber interface {
-	Transcribe(ctx context.Context, src domain.MediaRef) (domain.Transcript, error)
+	Transcribe(ctx context.Context, src domain.MediaRef, language string) (domain.Transcript, error)
 }
 
 // Editor asks the model for the cut, headline, captions and post text. It

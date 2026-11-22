@@ -224,3 +224,24 @@ func asJSON(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
 }
+
+func TestUserMessageGameTranscript(t *testing.T) {
+	req := request()
+	if strings.Contains(userMessage(req), "game's language") {
+		t.Fatal("game transcript section without a game transcript")
+	}
+	w := func(text string, start, end float64) domain.Word {
+		return domain.Word{Text: text, Start: time.Duration(start * float64(time.Second)), End: time.Duration(end * float64(time.Second))}
+	}
+	req.GameTranscript = domain.Transcript{Language: "en", Words: []domain.Word{
+		w("Let's", 1, 1.2), w("make", 1.2, 1.4), w("some", 1.4, 1.6), w("money.", 1.6, 2), w("Love", 2.1, 2.3), w("the", 2.3, 2.4),
+		w("hustle,", 2.4, 2.8), w("Lucia", 2.8, 3.2), w("Sit", 9, 9.2), w("down.", 9.2, 9.6),
+	}}
+	text := userMessage(req)
+	for _, want := range []string{"## Same audio transcribed in the game's language (en)", "\n1.00 Let's make some money.\n",
+		"\n2.10 Love the hustle, Lucia\n", "\n9.00 Sit down.\n"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("user message lacks %q:\n%s", want, text)
+		}
+	}
+}

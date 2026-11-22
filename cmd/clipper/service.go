@@ -119,7 +119,8 @@ func runService(_ []string, stderr io.Writer) error {
 			}
 		}))
 	transcriber := resilience.NewTranscriber(whisper.NewTranscriber(whisper.NewClient(cfg.Whisper.URL, &http.Client{Timeout: cfg.Whisper.Timeout.D()}),
-		whisper.WithWorkers(cfg.Concurrency.TranscribeWorkers), whisper.WithTimeout(cfg.Whisper.Timeout.D())), resilience.WhisperPolicy, rdeps)
+		whisper.WithWorkers(cfg.Concurrency.TranscribeWorkers), whisper.WithTimeout(cfg.Whisper.Timeout.D()),
+		whisper.WithBeamSize(cfg.Whisper.BeamSize)), resilience.WhisperPolicy, rdeps)
 	editor := resilience.NewEditor(newEditor(cfg, log), resilience.EditorPolicy, rdeps)
 	produce := app.NewProduceFinalClip(produceConfig(cfg), repo, transcriber, editor, renderer, notifier, media, clk, log, prom, errLog)
 	queue := app.NewJobQueue("produce", produce.Execute, max(cfg.Concurrency.TranscribeWorkers, cfg.Concurrency.RenderWorkers), 100,

@@ -15,11 +15,12 @@ import (
 // retained media with ffmpeg and sends it to whisper-server. A semaphore keeps
 // the GPU from being shared by more than `workers` transcriptions.
 type Transcriber struct {
-	client  *Client
-	sem     chan struct{}
-	timeout time.Duration
-	source  TimestampSource
-	extract func(ctx context.Context, src string) ([]byte, error)
+	client   *Client
+	sem      chan struct{}
+	timeout  time.Duration
+	source   TimestampSource
+	beamSize int
+	extract  func(ctx context.Context, src string) ([]byte, error)
 }
 
 var _ app.Transcriber = (*Transcriber)(nil)
@@ -31,6 +32,10 @@ type TranscriberOption func(*Transcriber)
 func WithWorkers(n int) TranscriberOption {
 	return func(t *Transcriber) { t.sem = make(chan struct{}, max(n, 1)) }
 }
+
+// WithBeamSize decodes with beam search of n candidates (more accurate, a few
+// seconds slower on the GPU); n <= 1 keeps greedy decoding.
+func WithBeamSize(n int) TranscriberOption { return func(t *Transcriber) { t.beamSize = n } }
 
 // WithTimeout bounds one transcription.
 func WithTimeout(d time.Duration) TranscriberOption { return func(t *Transcriber) { t.timeout = d } }
@@ -64,8 +69,9 @@ func extractArgs(src string) []string {
 	return []string{"-hide_banner", "-loglevel", "error", "-i", src, "-vn", "-af", "aresample=async=1:first_pts=0", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", "-f", "wav", "pipe:1"}
 }
 
-// Transcribe returns the words of the media with times relative to its start.
-func (t *Transcriber) Transcribe(ctx context.Context, src domain.MediaRef) (domain.Transcript, error) {
+// Transcribe returns the words of the media with times relative to its start,
+// in language ("" detects it from the first 30 s).
+func (t *Transcriber) Transcribe(ctx context.Context, src domain.MediaRef, language string) (domain.Transcript, error) {
 	select {
 	case t.sem <- struct{}{}:
 	case <-ctx.Done():
@@ -79,9 +85,22 @@ func (t *Transcriber) Transcribe(ctx context.Context, src domain.MediaRef) (doma
 	if err != nil {
 		return domain.Transcript{}, fmt.Errorf("extract audio of %s: %w", src, err)
 	}
-	body, err := t.client.Inference(ctx, bytes.NewReader(wav), InferenceOptions{Language: "auto"})
+	lang := language
+	if lang == "" {
+		lang = "auto"
+	}
+	body, err := t.client.Inference(ctx, bytes.NewReader(wav), InferenceOptions{Language: lang, BeamSize: t.beamSize})
 	if err != nil {
 		return domain.Transcript{}, fmt.Errorf("transcribe %s: %w", src, err)
 	}
-	return ParseVerboseJSON(body, t.source)
+	tr, err := ParseVerboseJSON(body, t.source)
+	if err != nil {
+		return domain.Transcript{}, err
+	}
+	if language != "" {
+		// The server may still report detection probabilities; the speech
+		// was decoded in the language asked for.
+		tr.Language = language
+	}
+	return tr, nil
 }

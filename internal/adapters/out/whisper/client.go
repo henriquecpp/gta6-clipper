@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -51,6 +52,9 @@ func (c *Client) Health(ctx context.Context) error {
 type InferenceOptions struct {
 	// Language is an ISO code or "auto".
 	Language string
+	// BeamSize > 1 decodes with beam search (best_of follows it); 0 keeps the
+	// server's greedy default.
+	BeamSize int
 }
 
 // Inference uploads WAV audio and returns the raw verbose_json body.
@@ -73,6 +77,10 @@ func (c *Client) Inference(ctx context.Context, wav io.Reader, opts InferenceOpt
 		"temperature":     "0.0",
 		"temperature_inc": "0.2",
 		"language":        lang,
+	}
+	if opts.BeamSize > 1 {
+		fields["beam_size"] = strconv.Itoa(opts.BeamSize)
+		fields["best_of"] = strconv.Itoa(opts.BeamSize)
 	}
 	for k, v := range fields {
 		if err := mw.WriteField(k, v); err != nil {

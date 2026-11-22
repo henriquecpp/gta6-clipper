@@ -59,8 +59,12 @@ type EditRequest struct {
 	// ViewerClipTitles are the titles viewers gave to their Twitch clips of
 	// the moment (hints for the headline; may be jokes or unrelated).
 	ViewerClipTitles []string
-	Constraints      EditConstraints
-	Retry            *EditRetry
+	// GameTranscript is the same audio transcribed in the game's language
+	// (English) when the streamer speaks another one: game characters read
+	// correctly there and garbled in Transcript. Empty when not available.
+	GameTranscript Transcript
+	Constraints    EditConstraints
+	Retry          *EditRetry
 }
 
 // ProposedCaption is a caption as proposed by the editor (seconds).

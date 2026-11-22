@@ -44,7 +44,7 @@ func Defaults() *Config {
 			MaxLineChars:     28,
 			HeadlineMaxChars: 60,
 		},
-		Whisper: Whisper{URL: "http://whisper:8080", Timeout: dur(5 * time.Minute)},
+		Whisper: Whisper{URL: "http://whisper:8080", Timeout: dur(5 * time.Minute), BeamSize: 5, GameLanguage: "en"},
 		Editor: Editor{
 			// Thinking tokens count toward max_tokens on current models; only
 			// the tokens actually generated are paid.

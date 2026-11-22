@@ -126,6 +126,12 @@ func (r Render) PreviewWidth() int {
 type Whisper struct {
 	URL     string   `yaml:"url"`
 	Timeout Duration `yaml:"timeout"`
+	// BeamSize > 1 decodes with beam search (more accurate, a bit slower).
+	BeamSize int `yaml:"beam_size"`
+	// GameLanguage is the language the game's characters speak. Streamers who
+	// speak another language get a second transcription in it, so the editor
+	// tells cutscene dialogue apart from the streamer. "" disables it.
+	GameLanguage string `yaml:"game_language"`
 }
 
 // Editor (Claude) settings.

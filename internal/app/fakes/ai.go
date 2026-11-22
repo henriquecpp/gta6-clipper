@@ -8,24 +8,38 @@ import (
 	"github.com/henriquecpp/gta6-clipper/internal/domain"
 )
 
-// Transcriber returns a fixed transcript.
+// Transcriber returns a fixed transcript (or a per-language one) and records
+// the languages asked for.
 type Transcriber struct {
 	mu         sync.Mutex
 	Transcript domain.Transcript
 	Err        error
 	Calls      int
+	// ByLanguage overrides Transcript/Err for a language.
+	ByLanguage map[string]TranscriptAnswer
+	Languages  []string
+}
+
+// TranscriptAnswer is a scripted answer for one language.
+type TranscriptAnswer struct {
+	Transcript domain.Transcript
+	Err        error
 }
 
 var _ app.Transcriber = (*Transcriber)(nil)
 
 // Transcribe returns the scripted transcript or error.
-func (t *Transcriber) Transcribe(ctx context.Context, _ domain.MediaRef) (domain.Transcript, error) {
+func (t *Transcriber) Transcribe(ctx context.Context, _ domain.MediaRef, language string) (domain.Transcript, error) {
 	if err := ctx.Err(); err != nil {
 		return domain.Transcript{}, err
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.Calls++
+	t.Languages = append(t.Languages, language)
+	if a, ok := t.ByLanguage[language]; ok {
+		return a.Transcript, a.Err
+	}
 	return t.Transcript, t.Err
 }
 

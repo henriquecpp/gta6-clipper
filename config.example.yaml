@@ -53,6 +53,12 @@ render:
 whisper:
   url: http://whisper:8080
   timeout: 5m
+  beam_size: 5              # beam search: more accurate than greedy, a few seconds more on the GPU
+  # Speech is transcribed in each streamer's `language` (auto-detection looks only at the
+  # first 30 s, and an English cutscene there turned Portuguese speech into made-up English).
+  # Streamers who speak another language get a second pass in the game's language, so the
+  # editor can tell cutscene/NPC dialogue apart from the streamer. "" disables it.
+  game_language: en
 
 editor:
   max_tokens: 16000         # thinking counts toward it; only generated tokens are paid

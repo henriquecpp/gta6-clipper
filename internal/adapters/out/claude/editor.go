@@ -190,6 +190,25 @@ func userMessage(req domain.EditRequest) string {
 			b.WriteString(" | ")
 		}
 	}
+	if g := req.GameTranscript; len(g.Words) > 0 {
+		// Compact lines (start time + text): it only tells who is speaking.
+		fmt.Fprintf(&b, "\n## Same audio transcribed in the game's language (%s), to spot game dialogue (start text)\n", orNone(g.Language))
+		var line []string
+		var lineStart time.Duration
+		for i, w := range g.Words {
+			if len(line) == 0 {
+				lineStart = w.Start
+			}
+			line = append(line, w.Text)
+			last := i == len(g.Words)-1
+			gap := !last && g.Words[i+1].Start-w.End > 1500*time.Millisecond
+			sentence := strings.HasSuffix(w.Text, ".") || strings.HasSuffix(w.Text, "?") || strings.HasSuffix(w.Text, "!")
+			if last || gap || len(line) == 14 || sentence {
+				fmt.Fprintf(&b, "%s %s\n", f2(lineStart), strings.Join(line, " "))
+				line = line[:0]
+			}
+		}
+	}
 	b.WriteString("\n## Signals per second (second voice chat clips)\n")
 	for _, s := range req.Signals {
 		fmt.Fprintf(&b, "%d %.1f %.1f %.0f\n", int(time.Duration(s.Pos)/time.Second), s.Voice, s.Chat, s.Clips)

@@ -56,6 +56,15 @@ func TestWhisperURLFromEnv(t *testing.T) {
 	if err != nil || cfg.Whisper.URL != "http://b:2" {
 		t.Fatalf("url = %v, %v", cfg.Whisper.URL, err)
 	}
+	if cfg.Whisper.BeamSize != 5 || cfg.Whisper.GameLanguage != "en" {
+		t.Fatalf("whisper defaults = %+v", cfg.Whisper)
+	}
+	if _, err := Parse([]byte("whisper: {beam_size: 99}"), env(nil)); err == nil {
+		t.Fatal("beam_size 99 accepted")
+	}
+	if cfg, err := Parse([]byte("whisper: {beam_size: 0, game_language: ''}"), env(nil)); err != nil || cfg.Whisper.GameLanguage != "" {
+		t.Fatalf("greedy without second pass: %+v, %v", cfg.Whisper, err)
+	}
 }
 
 func TestStreamerConversion(t *testing.T) {
