@@ -175,3 +175,46 @@ func TestNormalizeClamps(t *testing.T) {
 		t.Fatalf("normalize = %+v", r)
 	}
 }
+
+func TestAnalyzeNeverStretchesTheBoxToTheFrameEdge(t *testing.T) {
+	// Like alanzoka's clip of 2026-11-23: the game right under the camera
+	// barely moves, so the frame's bottom edge (a perfect line with "moving"
+	// content beyond it) used to beat the real border and the box became a
+	// portrait strip down to the bottom of the screen.
+	cam := box{496, 162, 636, 266}
+	frames := synth(12, cam, box{530, 185, 575, 266})
+	for _, f := range frames {
+		for y := cam.y1; y < frameH; y++ {
+			for x := cam.x0; x < frameW; x++ {
+				f[y*frameW+x] = uint8(90 + (x+y)%7) // static
+			}
+		}
+	}
+	res := analyze(frames, fixedFace(face{551, 205, 44}, always), aspect)
+	r := res.rect
+	if !res.ok || r.Y+r.H > 0.85 {
+		t.Fatalf("result = %+v: the camera must not reach the bottom of the frame", res)
+	}
+	if got := r.W * frameW / (r.H * frameH); got < minCamAspect {
+		t.Fatalf("portrait camera %+v (aspect %.2f)", r, got)
+	}
+}
+
+func TestPlausibleBox(t *testing.T) {
+	for name, tc := range map[string]struct {
+		b    box
+		want bool
+	}{
+		"alanzoka":           {box{496, 163, 634, 266}, true},
+		"16:9 webcam":        {box{0, 127, 178, 225}, true},
+		"portrait strip":     {box{496, 163, 634, 360}, false},
+		"thin wide strip":    {box{300, 100, 600, 210 - 90}, false},
+		"whole width":        {box{0, 100, 640, 200}, false},
+		"most of the screen": {box{20, 20, 420, 300}, false},
+		"empty":              {box{100, 100, 100, 150}, false},
+	} {
+		if got := plausibleBox(tc.b); got != tc.want {
+			t.Errorf("%s: plausibleBox(%+v) = %v, want %v", name, tc.b, got, tc.want)
+		}
+	}
+}

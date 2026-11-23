@@ -250,7 +250,12 @@ func fitBox(sd, px, py []float64, f face) (box, [4]float64) {
 	top, st := best(max(cy-5*fs/2, 0), max(cy-fs/2, 0), func(y int) float64 {
 		return (stillMoving(rowStd(y, y+k), rowStd(y-k, y)) + hline(py, y, left, right)) / 2
 	})
-	bottom, sb := best(min(cy+7*fs/10, frameH), min(cy+4*fs, frameH), func(y int) float64 {
+	// A camera is landscape or about square: the bottom is never searched
+	// below top + width/minCamAspect. Without this, the frame's bottom edge
+	// (a perfect "line" with "moving" content beyond it) beats a faint real
+	// border when the game under the camera moves little.
+	bottomMax := min(cy+4*fs, frameH, top+int(float64(w)/minCamAspect))
+	bottom, sb := best(min(cy+7*fs/10, frameH), bottomMax, func(y int) float64 {
 		return (stillMoving(rowStd(y-k, y), rowStd(y, y+k)) + hline(py, y, left, right)) / 2
 	})
 	return box{left, top, right, bottom}, [4]float64{sl, sr, st, sb}
@@ -259,14 +264,24 @@ func fitBox(sd, px, py []float64, f face) (box, [4]float64) {
 // maxBoxShare is the largest share of the frame a camera box may cover.
 const maxBoxShare = 0.35
 
-// plausibleBox rejects "boxes" that are really the frame: a camera never
-// touches opposite edges nor covers most of the screen.
+// Camera boxes are landscape or about square (width/height in pixels): 4:3
+// and 16:9 webcams, taller with an alert bar under them (1.36 for alanzoka,
+// 1.6–1.8 for xqc and facada).
+const minCamAspect, maxCamAspect = 0.9, 2.4
+
+// plausibleBox rejects "boxes" that are really the frame or a bad fit: a
+// camera never touches opposite edges, covers most of the screen, or is
+// portrait or a thin strip.
 func plausibleBox(b box) bool {
 	if (b.x0 <= 1 && b.x1 >= frameW-1) || (b.y0 <= 1 && b.y1 >= frameH-1) {
 		return false
 	}
 	w, h := b.x1-b.x0, b.y1-b.y0
-	return w > 0 && h > 0 && float64(w*h) <= maxBoxShare*frameW*frameH
+	if w <= 0 || h <= 0 {
+		return false
+	}
+	aspect := float64(w) / float64(h)
+	return aspect >= minCamAspect && aspect <= maxCamAspect && float64(w*h) <= maxBoxShare*frameW*frameH
 }
 
 // proportional is a crop around the face, camWidthFaces wide, with the face
