@@ -149,15 +149,7 @@ func (u *ProduceFinalClip) edit(ctx context.Context, c *domain.Clip, log *slog.L
 	if err != nil {
 		return nil, fmt.Errorf("transcribe: %w", err)
 	}
-	cons := domain.EditConstraints{
-		WindowDuration:   c.Window.Duration(),
-		Peak:             time.Duration(c.Moment.Peak - c.Window.From),
-		MinDuration:      u.cfg.MinDuration,
-		MaxDuration:      u.cfg.MaxDuration,
-		PeakTolerance:    u.cfg.PeakTolerance,
-		HeadlineMaxChars: u.cfg.HeadlineMaxChars,
-		Streamer:         c.Streamer,
-	}
+	cons := u.constraints(c)
 
 	plan := c.Plan
 	if plan == nil {
@@ -232,6 +224,34 @@ func (u *ProduceFinalClip) edit(ctx context.Context, c *domain.Clip, log *slog.L
 	return out, nil
 }
 
+// constraints are the editor's limits for the clip.
+func (u *ProduceFinalClip) constraints(c *domain.Clip) domain.EditConstraints {
+	return domain.EditConstraints{
+		WindowDuration:   c.Window.Duration(),
+		Peak:             time.Duration(c.Moment.Peak - c.Window.From),
+		MinDuration:      u.cfg.MinDuration,
+		MaxDuration:      u.cfg.MaxDuration,
+		PeakTolerance:    u.cfg.PeakTolerance,
+		HeadlineMaxChars: u.cfg.HeadlineMaxChars,
+		Streamer:         c.Streamer,
+	}
+}
+
+// DraftPlan runs the editor on a clip exactly as the production does
+// (game-language pass, frames, one retry, word snapping) without saving or
+// changing anything: for dry runs that check the editor's texts.
+func (u *ProduceFinalClip) DraftPlan(ctx context.Context, c *domain.Clip, transcript domain.Transcript) (domain.EditPlan, domain.Usage, error) {
+	log := u.log.With(slog.String("clip_id", string(c.ID)), slog.String("streamer", c.Streamer))
+	cons := u.constraints(c)
+	game := u.gameTranscript(ctx, c, u.cfg.Streamers[c.Streamer].Language, log)
+	frames := u.sampleFrames(ctx, c, log)
+	p, usage, err := u.plan(ctx, c, transcript, game, frames, cons)
+	if err != nil {
+		return domain.EditPlan{}, usage, err
+	}
+	return p.SnapToWords(transcript, u.cfg.SnapMargin, cons), usage, nil
+}
+
 // gameTranscript transcribes the audio again in the game's language when the
 // streamer speaks another one. It only helps the editor tell game dialogue
 // apart, so a failure is logged and the edit goes on without it.
@@ -304,7 +324,8 @@ func (u *ProduceFinalClip) plan(ctx context.Context, c *domain.Clip, t, game dom
 		if !domain.IsInvalidEditPlan(err) || attempt == 1 {
 			return domain.EditPlan{}, total, err
 		}
-		u.log.Warn("editor answer invalid; retrying once", slog.String("clip_id", string(c.ID)), slog.String("err", err.Error()))
+		u.log.Warn("editor answer invalid; retrying once", slog.String("clip_id", string(c.ID)), slog.String("err", err.Error()),
+			slog.String("answer", truncate(proposal.RawInput+proposal.RawText, 1500)))
 		req.Retry = &domain.EditRetry{Previous: proposal, Problem: err.Error()}
 	}
 	return domain.EditPlan{}, total, errors.New("unreachable")
@@ -405,4 +426,12 @@ func layoutOf(streamers map[string]domain.Streamer, login string) (domain.Layout
 		return domain.LayoutBlur, domain.StackRegions{}
 	}
 	return st.Layout, st.Stack
+}
+
+// truncate keeps the first n bytes of s (for logs).
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }

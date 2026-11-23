@@ -51,7 +51,8 @@ func Defaults() *Config {
 			MaxTokens:         16000,
 			Timeout:           dur(90 * time.Second),
 			MaxCostPerClipUSD: 0.05,
-			ToolChoice:        "tool",
+			ToolChoice:        "auto", // the model thinks before calling the tool (ADR 0030)
+			Effort:            "high",
 			PeakTolerance:     dur(5 * time.Second),
 			FrameInterval:     dur(3 * time.Second),
 			MaxFrames:         40,

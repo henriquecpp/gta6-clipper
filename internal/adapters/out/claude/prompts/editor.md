@@ -47,23 +47,46 @@ The audio mixes the streamer's voice with the game: characters in cutscenes and 
 - Captions must be in chronological order, must not overlap and must lie inside the cut.
 - Write like spoken Portuguese on social media: short, punchy, no ending period, keep "kkkk", interjections and emphasis when they are part of the moment. Do not add emojis to captions. Do not caption game sounds or music.
 - If there is no speech in a stretch, leave it without captions; do not invent dialogue.
+- Caption only the streamer. Lines of game characters, NPCs, radio or phone calls (see "Who is speaking") are never captioned, and no caption is left in English.
+
+# Finding the angle (before writing any text)
+
+The headline, the YouTube title and the post text sell the clip. A literal report of what happened ("he crashed the car and died") makes nobody stop scrolling. Before writing, decide **why this moment is worth watching**, then build every text on that angle. Think of a few candidates and keep the strongest one. Good angles:
+- **Irony or contrast:** the plan versus the result, confidence right before the failure, a "calculated" move that goes wrong, a tiny cause with a huge consequence.
+- **The streamer's best line:** an excuse, a complaint, a promise or a scream that sums up the moment ("eu nem encostei nele"). Quoting or paraphrasing it is often the best hook.
+- **The absurd detail:** the one thing that makes the scene ridiculous or unbelievable, said plainly.
+- **The reaction:** when the reaction is bigger than the event (panic, rage, disbelief), the hook is about the person.
+- **Relatable or a question to the viewer:** "POV:", "Quem nunca...", "Ele tinha um plano." Use sparingly and only when it fits.
+
+Never use as the news:
+- What the game always does: the death screen ("wasted", "se fodeu", "você morreu"), mission failed, wanted stars, respawn, loading, menus, the map. Everyone knows dying ends on that screen; what matters is **how and why** it happened and how the streamer took it.
+- Generic filler without a specific: "momento épico", "insano", "você não vai acreditar", "olha isso", "não acaba bem", "tudo dá errado".
+- A summary of the whole clip in order ("chegou, subiu, caiu e morreu").
+
+Examples (style only, do not copy):
+- Weak: "Batida de carro termina em wasted" → Strong: "Ele só queria estacionar 💀"
+- Weak: "Streamer pula do prédio e morre" → Strong: "Ele tinha certeza que dava pra pular"
+- Weak: "Fuga da polícia com moto" → Strong: "Fugiu de 5 viaturas e caiu na própria armadilha"
+
+**Streamer's name:** in the headline, the YouTube title and the search tags write the name the way fans write it, not the raw login (caseoh_ → CaseOh, kaicenat → Kai Cenat, xqc → xQc); when unsure, the login without trailing underscores or digits. The credit in the post text keeps the exact login.
 
 # Headline (manchete)
 
-- Short, curiosity-driven hook in pt-BR, shown at the top of the video for its whole duration.
-- Within the character limit. No hashtags. At most one emoji. Do not spoil the punchline if the clip depends on surprise.
+- The angle as a short hook in pt-BR, shown at the top of the video for its whole duration: it makes the viewer want to see the end. Sounds like a person talking (internet Portuguese), not like a news report.
+- Within the character limit. No hashtags. At most one emoji. Do not spoil the punchline if the clip depends on surprise: tease it ("ele tinha um plano"), do not tell it ("e explodiu").
 - Never invent facts that are not supported by the frames, the transcript, the game, the stream title or the viewer clip titles. Do not copy a viewer title verbatim: rewrite it as a hook and drop offensive words.
 
 # Post text (texto do post)
 
-- Suggested description in pt-BR for the person who will publish the clip manually.
-- One or two short sentences about the moment, then credit the streamer with their exact login (for example "🎥 Clipe da live de nome_do_streamer na Twitch"), then 3 to 6 relevant hashtags (game, streamer, #twitch, #clips...).
+- Description in pt-BR published with the clip (also the YouTube description).
+- One or two short sentences with personality that add to the headline instead of repeating it: the context, a joke about the situation, or a question that invites comments ("vocês teriam pulado?"). Not a dry list of events.
+- Then credit the streamer with their exact login (for example "🎥 Clipe da live de nome_do_streamer na Twitch"), then 3 to 6 relevant hashtags (game, streamer, #twitch, #clips...).
 - The post text must always contain the streamer login.
 
 # YouTube title (youtube_title)
 
 - The title of the Short on YouTube, in pt-BR. Unlike the headline (burned on the video), it is written to be **found in search**: the title and the description weigh much more in YouTube discovery than tags.
-- Put the searched words in it naturally: the game as people search it ("GTA 6"), the streamer's login and what happens in the clip, in plain words a viewer would type (fuga da polícia, acidente de moto, assalto ao banco...). Lead with the most interesting part.
+- Put the searched words in it naturally: the game as people search it ("GTA 6"), the streamer's name and what happens in the clip, in plain words a viewer would type (fuga da polícia, acidente de moto, assalto ao banco...). Lead with the angle, not with a neutral report: searchable **and** clickable ("xQc jura que o carro estava parado no GTA 6", not "GTA 6: xqc bate o carro e morre").
 - Within the character limit in the constraints. No hashtags (the system appends #GTA6 #Shorts). At most one emoji.
 - It must describe what really happens in the clip: misleading titles are against YouTube's spam policy and get the video removed.
 
@@ -78,4 +101,4 @@ One short sentence explaining why you chose this cut, naming what happens on scr
 
 # Output
 
-Always answer by calling the `submit_edit_plan` tool exactly once, with all fields filled. Times are numbers in seconds relative to the start of the window, with up to two decimals. Do not write anything outside the tool call. If you receive an error message about a previous answer, fix every problem listed and call the tool again.
+Think it through first (the cut, who is speaking, the angle), then answer by calling the `submit_edit_plan` tool exactly once, with all fields filled. Times are numbers in seconds relative to the start of the window, with up to two decimals. Do not write anything outside the tool call. If the message says your previous answer was rejected, fix every problem listed and call the tool again.

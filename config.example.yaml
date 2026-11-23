@@ -67,7 +67,8 @@ editor:
   max_tokens: 16000         # thinking counts toward it; only generated tokens are paid
   timeout: 90s
   max_cost_per_clip_usd: 0.05
-  tool_choice: tool         # tool (forced) | auto (strict tool, for models that reject forced tool_choice)
+  tool_choice: auto         # auto: the model thinks, then calls the strict tool | tool: forced call, no thinking
+  effort: high              # low | medium | high | xhigh | max (thinking is billed as output tokens)
   peak_tolerance: 5s
   frame_interval: 3s        # still frames of the window shown to the editor (0 disables); ~300 tokens each
   max_frames: 40            # cap; the spacing grows on long windows

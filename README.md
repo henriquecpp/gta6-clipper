@@ -204,7 +204,9 @@ twitch:
 - **`approval.ttl`** (6 h): prévias não decididas expiram e a mídia é apagada.
 - **`render`**: resolução, fps (30/60), duração mínima/máxima do corte, `max_file_bytes` (≤ 50 MiB, limite
   do Telegram), fonte e caracteres por linha da legenda.
-- **`editor`**: `max_tokens`, `timeout`, `max_cost_per_clip_usd` (alerta), `tool_choice` e **`pricing`**
+- **`editor`**: `max_tokens`, `timeout`, `max_cost_per_clip_usd` (alerta), `tool_choice` (`auto`: o modelo
+  pensa no ângulo do clipe antes de responder; `tool`: chamada forçada, sem pensar), `effort` (`high`) e
+  **`pricing`**
   (US$ por milhão de tokens do modelo escolhido — o código não tem preços embutidos). `frame_interval` (3 s) e
   `max_frames` (40) controlam os quadros da janela que o Claude vê: imagens 640×360 tiradas só dos
   quadros-chave (CPU, ~1 s por clipe), ~300 tokens cada (~US$ 0,001 por clipe no Haiku 5.5). Com eles o
@@ -311,6 +313,7 @@ Ele captura por 60 s, mostra frames de áudio/fala, retém 20 s e estima a latê
 | Reautorizar a Twitch | `task auth:twitch` |
 | Autorizar/reautorizar o canal do YouTube | `task auth:youtube` (depois `docker compose up -d --force-recreate app`) |
 | Testar transcrição + render sem Claude | `docker compose run --rm --no-deps app dryrun` (lista clipes com mídia retida) e `... app dryrun <clip_id>` |
+| Testar os textos do Claude num clipe retido | `docker compose run --rm --no-deps app dryrun -editor <clip_id>` (gasta tokens, ~US$ 0,004; não muda nada) |
 
 - **`dryrun`:** transcreve a janela retida de um clipe real, monta um corte sem IA (≈30 s em volta do pico,
   legenda com a fala original, sem tradução) e renderiza em `.\output`. Não muda o estado do clipe, não

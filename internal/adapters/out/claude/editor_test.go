@@ -20,6 +20,7 @@ import (
 // fakeAPI imitates POST /v1/messages and records the request bodies.
 type fakeAPI struct {
 	mu      sync.Mutex
+	raw     []string
 	bodies  []map[string]any
 	replies []string // raw JSON message bodies, in order (last repeats)
 	status  int
@@ -37,6 +38,7 @@ func (f *fakeAPI) handler(t *testing.T) http.HandlerFunc {
 		var m map[string]any
 		_ = json.Unmarshal(body, &m)
 		f.mu.Lock()
+		f.raw = append(f.raw, string(body))
 		f.bodies = append(f.bodies, m)
 		i := min(len(f.bodies)-1, len(f.replies)-1)
 		status, reply := f.status, ""
@@ -131,13 +133,38 @@ func TestPlanForcedToolChoice(t *testing.T) {
 }
 
 func TestPlanAutoToolChoiceIsStrict(t *testing.T) {
-	f := &fakeAPI{replies: []string{message(toolUseContent("t"))}}
+	// The model thinks first: the answer starts with a thinking block.
+	reply := message(`[{"type":"thinking","thinking":"the angle is...","signature":"sig"},` +
+		`{"type":"tool_use","id":"t","name":"submit_edit_plan","input":` + goodInput + `}]`)
+	f := &fakeAPI{replies: []string{reply}}
 	e := newTestEditor(t, f, ToolChoiceAuto)
-	if _, _, err := e.Plan(context.Background(), request()); err != nil {
-		t.Fatal(err)
+	p, _, err := e.Plan(context.Background(), request())
+	if err != nil || p.Headline != "Ele pulou da ponte!" {
+		t.Fatalf("plan = %+v, %v", p, err)
 	}
 	if f.bodies[0]["tool_choice"].(map[string]any)["type"] != "auto" || f.bodies[0]["tools"].([]any)[0].(map[string]any)["strict"] != true {
 		t.Fatalf("auto/strict not set: %v", f.bodies[0]["tool_choice"])
+	}
+	if _, set := f.bodies[0]["output_config"]; set {
+		t.Fatalf("effort sent without being configured: %v", f.bodies[0]["output_config"])
+	}
+}
+
+func TestPlanDefaultsToThinkingWithEffort(t *testing.T) {
+	f := &fakeAPI{replies: []string{message(toolUseContent("t"))}}
+	srv := httptest.NewServer(f.handler(t))
+	t.Cleanup(srv.Close)
+	e := New(Config{APIKey: "sk-test", Model: "claude-haiku-5-5", MaxTokens: 2000, Effort: "high"},
+		option.WithBaseURL(srv.URL), option.WithHTTPClient(srv.Client()))
+	if _, _, err := e.Plan(context.Background(), request()); err != nil {
+		t.Fatal(err)
+	}
+	b := f.bodies[0]
+	if b["tool_choice"].(map[string]any)["type"] != "auto" {
+		t.Fatalf("default tool_choice = %v, want auto (the model thinks before the tool call)", b["tool_choice"])
+	}
+	if oc, _ := b["output_config"].(map[string]any); oc["effort"] != "high" {
+		t.Fatalf("output_config = %v", b["output_config"])
 	}
 }
 
@@ -169,32 +196,32 @@ func TestPlanRetryConversation(t *testing.T) {
 		t.Fatal(err)
 	}
 	msgs := f.bodies[0]["messages"].([]any)
-	if len(msgs) != 3 {
-		t.Fatalf("messages = %d, want user/assistant/user", len(msgs))
+	// A fresh single turn: replaying the assistant tool call would need its
+	// thinking blocks back unmodified.
+	if len(msgs) != 1 {
+		t.Fatalf("messages = %d, want one user turn", len(msgs))
 	}
-	toolUse := msgs[1].(map[string]any)["content"].([]any)[0].(map[string]any)
-	result := msgs[2].(map[string]any)["content"].([]any)[0].(map[string]any)
-	if toolUse["type"] != "tool_use" || toolUse["id"] != "toolu_1" || result["type"] != "tool_result" || result["tool_use_id"] != "toolu_1" || result["is_error"] != true {
-		t.Fatalf("retry messages = %v / %v", toolUse, result)
-	}
-	if !strings.Contains(asJSON(result), "headline is empty") {
-		t.Fatalf("problem not sent: %v", result)
+	text := asJSON(msgs[0])
+	for _, want := range []string{"previous answer was rejected", `{\"start_s\":10}`, "Problem: headline is empty"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("retry turn lacks %q: %s", want, text)
+		}
 	}
 
-	// Previous answer was plain text: the text is replayed.
+	// Previous answer was plain text: it is quoted.
 	f2 := &fakeAPI{replies: f.replies}
 	e2 := newTestEditor(t, f2, ToolChoiceForced)
 	req.Retry = &domain.EditRetry{Previous: domain.EditProposal{RawText: "ok"}, Problem: "no tool call"}
 	_, _, _ = e2.Plan(context.Background(), req)
-	if len(f2.bodies[0]["messages"].([]any)) != 3 {
-		t.Fatal("text retry should replay the assistant text")
+	if msgs := f2.bodies[0]["messages"].([]any); len(msgs) != 1 || !strings.Contains(asJSON(msgs[0]), "Previous answer (text, no tool call): ok") {
+		t.Fatalf("text retry = %v", msgs)
 	}
-	// Nothing to replay: the problem is appended to the user message.
+	// Nothing to quote: only the problem.
 	f3 := &fakeAPI{replies: f.replies}
 	e3 := newTestEditor(t, f3, ToolChoiceForced)
 	req.Retry = &domain.EditRetry{Problem: "empty"}
 	_, _, _ = e3.Plan(context.Background(), req)
-	if msgs := f3.bodies[0]["messages"].([]any); len(msgs) != 1 || !strings.Contains(asJSON(msgs[0]), "rejected") {
+	if msgs := f3.bodies[0]["messages"].([]any); len(msgs) != 1 || !strings.Contains(asJSON(msgs[0]), "Problem: empty") {
 		t.Fatalf("messages = %v", msgs)
 	}
 }
@@ -271,5 +298,24 @@ func TestPlanShowsFramesBeforeTheText(t *testing.T) {
 	}
 	if last := block(5)["text"].(string); !strings.HasPrefix(last, "## Metadata") || !strings.Contains(last, "rejected") {
 		t.Fatalf("text block = %s", last)
+	}
+}
+
+func TestToolPropertiesKeepTheirOrder(t *testing.T) {
+	f := &fakeAPI{replies: []string{message(toolUseContent("t"))}}
+	e := newTestEditor(t, f, ToolChoiceAuto)
+	if _, _, err := e.Plan(context.Background(), request()); err != nil {
+		t.Fatal(err)
+	}
+	// The cut comes before the captions, and the captions before the texts.
+	raw := f.raw[0]
+	props := raw[strings.Index(raw, `"properties":{"start_s"`):]
+	last := -1
+	for _, name := range []string{"start_s", "end_s", "captions", "headline", "youtube_title", "post_text", "search_tags", "reasoning"} {
+		i := strings.Index(props, `"`+name+`":{`)
+		if i <= last {
+			t.Fatalf("property %s out of order in %s", name, props[:min(len(props), 400)])
+		}
+		last = i
 	}
 }

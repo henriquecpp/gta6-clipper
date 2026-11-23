@@ -6,6 +6,7 @@
 package claude
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/base64"
@@ -39,11 +40,16 @@ const (
 // Config configures the editor. Model and prices come from configuration,
 // never from code.
 type Config struct {
-	APIKey     string
-	Model      string
-	MaxTokens  int64
-	Timeout    time.Duration
+	APIKey    string
+	Model     string
+	MaxTokens int64
+	Timeout   time.Duration
+	// ToolChoice is "auto" (the model thinks, then calls the strict tool) or
+	// "tool" (forced call: no thinking on models that accept it).
 	ToolChoice string
+	// Effort is the output_config.effort sent to the model (low, medium,
+	// high, xhigh, max); empty keeps the model default.
+	Effort string
 }
 
 // Editor implements app.Editor.
@@ -58,7 +64,7 @@ var _ app.Editor = (*Editor)(nil)
 // for tests.
 func New(cfg Config, opts ...option.RequestOption) *Editor {
 	if cfg.ToolChoice == "" {
-		cfg.ToolChoice = ToolChoiceForced
+		cfg.ToolChoice = ToolChoiceAuto
 	}
 	base := []option.RequestOption{
 		option.WithAPIKey(cfg.APIKey),
@@ -85,40 +91,76 @@ func (e *APIError) Temporary() bool {
 	return e.Status == http.StatusTooManyRequests || e.Status == 529 || e.Status >= 500
 }
 
+// prop is one tool input property; the slice order is the order the model
+// writes them in.
+type prop struct {
+	name   string
+	schema map[string]any
+}
+
+// orderedProps encodes the properties keeping their order. A Go map would
+// sort them, putting "captions" before the cut: with strict tool use the
+// model then wrote the captions before choosing the cut and left them empty
+// (every first answer was rejected and retried).
+func orderedProps(props []prop) json.RawMessage {
+	var b bytes.Buffer
+	b.WriteByte('{')
+	for i, p := range props {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		// Literal maps of strings, numbers and slices: marshaling cannot fail.
+		k, _ := json.Marshal(p.name)
+		v, _ := json.Marshal(p.schema)
+		b.Write(k)
+		b.WriteByte(':')
+		b.Write(v)
+	}
+	b.WriteByte('}')
+	return b.Bytes()
+}
+
 func tool(strict bool) anthropic.ToolParam {
 	num := func(desc string) map[string]any { return map[string]any{"type": "number", "description": desc} }
 	str := func(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
+	// The cut first, then the captions inside it, then the texts.
+	props := []prop{
+		{"start_s", num("Início do corte, em segundos relativos à janela")},
+		{"end_s", num("Fim do corte, em segundos relativos à janela")},
+		{"captions", map[string]any{
+			"type":        "array",
+			"description": "Legendas da fala do streamer dentro do corte, em ordem",
+			"items": map[string]any{
+				"type":                 "object",
+				"required":             []string{"start_s", "end_s", "text"},
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"start_s": map[string]any{"type": "number"},
+					"end_s":   map[string]any{"type": "number"},
+					"text":    str("Texto em PT-BR (traduzido se a fala for em outro idioma)"),
+				},
+			},
+		}},
+		{"headline", str("Manchete curta em PT-BR: o gancho do momento")},
+		{"youtube_title", str("Título do Short no YouTube em PT-BR, pensado para busca: GTA 6, o streamer e o gancho")},
+		{"post_text", str("Texto do post com personalidade, com crédito ao streamer")},
+		{"search_tags", map[string]any{
+			"type":        "array",
+			"description": "Frases de busca específicas deste momento (PT-BR e inglês), sem hashtags nem vírgulas",
+			"items":       map[string]any{"type": "string"},
+		}},
+		{"reasoning", str("Uma frase explicando a escolha do corte (para depuração)")},
+	}
+	required := make([]string, len(props))
+	for i, p := range props {
+		required[i] = p.name
+	}
 	t := anthropic.ToolParam{
 		Name:        ToolName,
-		Description: anthropic.String("Submit the chosen cut, the pt-BR headline and captions, the suggested post text and the YouTube title and search tags."),
+		Description: anthropic.String("Submit the chosen cut, the pt-BR captions and headline, the YouTube title, the post text and the search tags."),
 		InputSchema: anthropic.ToolInputSchemaParam{
-			Properties: map[string]any{
-				"start_s":  num("Início do corte, em segundos relativos à janela"),
-				"end_s":    num("Fim do corte, em segundos relativos à janela"),
-				"headline": str("Manchete curta em PT-BR"),
-				"captions": map[string]any{
-					"type": "array",
-					"items": map[string]any{
-						"type":                 "object",
-						"required":             []string{"start_s", "end_s", "text"},
-						"additionalProperties": false,
-						"properties": map[string]any{
-							"start_s": map[string]any{"type": "number"},
-							"end_s":   map[string]any{"type": "number"},
-							"text":    str("Texto em PT-BR (traduzido se a fala for em outro idioma)"),
-						},
-					},
-				},
-				"post_text":     str("Texto sugerido do post, com crédito ao streamer"),
-				"youtube_title": str("Título do Short no YouTube em PT-BR, pensado para busca: GTA 6, o streamer e o gancho"),
-				"search_tags": map[string]any{
-					"type":        "array",
-					"description": "Frases de busca específicas deste momento (PT-BR e inglês), sem hashtags nem vírgulas",
-					"items":       map[string]any{"type": "string"},
-				},
-				"reasoning": str("Uma frase explicando a escolha do corte (para depuração)"),
-			},
-			Required:    []string{"start_s", "end_s", "headline", "captions", "post_text", "youtube_title", "search_tags", "reasoning"},
+			Properties:  orderedProps(props),
+			Required:    required,
 			ExtraFields: map[string]any{"additionalProperties": false},
 		},
 	}
@@ -143,27 +185,30 @@ func (e *Editor) params(req domain.EditRequest) anthropic.MessageNewParams {
 	} else {
 		p.ToolChoice = anthropic.ToolChoiceUnionParam{OfAuto: &anthropic.ToolChoiceAutoParam{DisableParallelToolUse: anthropic.Bool(true)}}
 	}
-	p.Messages = []anthropic.MessageParam{anthropic.NewUserMessage(userContent(req, "")...)}
-	if r := req.Retry; r != nil {
-		problem := "Your previous answer was rejected: " + r.Problem + ". Fix every problem and call " + ToolName + " again."
-		switch {
-		case r.Previous.ToolUseID != "":
-			input := json.RawMessage(r.Previous.RawInput)
-			if !json.Valid(input) {
-				input = json.RawMessage(`{}`)
-			}
-			p.Messages = append(p.Messages,
-				anthropic.NewAssistantMessage(anthropic.NewToolUseBlock(r.Previous.ToolUseID, input, ToolName)),
-				anthropic.NewUserMessage(anthropic.NewToolResultBlock(r.Previous.ToolUseID, problem, true)))
-		case strings.TrimSpace(r.Previous.RawText) != "":
-			p.Messages = append(p.Messages,
-				anthropic.NewAssistantMessage(anthropic.NewTextBlock(r.Previous.RawText)),
-				anthropic.NewUserMessage(anthropic.NewTextBlock(problem)))
-		default:
-			p.Messages[0] = anthropic.NewUserMessage(userContent(req, "\n\n"+problem)...)
-		}
+	if e.cfg.Effort != "" {
+		p.OutputConfig = anthropic.OutputConfigParam{Effort: anthropic.OutputConfigEffort(e.cfg.Effort)}
 	}
+	p.Messages = []anthropic.MessageParam{anthropic.NewUserMessage(userContent(req, retryNote(req.Retry))...)}
 	return p
+}
+
+// retryNote tells the model why its previous answer was rejected. The retry is
+// a fresh single turn (not a replay of the assistant turn): with thinking on,
+// a replayed tool call would need its thinking blocks back unmodified.
+func retryNote(r *domain.EditRetry) string {
+	if r == nil {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n\n## Your previous answer was rejected\n")
+	switch {
+	case strings.TrimSpace(r.Previous.RawInput) != "":
+		fmt.Fprintf(&b, "Previous %s input: %s\n", ToolName, r.Previous.RawInput)
+	case strings.TrimSpace(r.Previous.RawText) != "":
+		fmt.Fprintf(&b, "Previous answer (text, no tool call): %s\n", r.Previous.RawText)
+	}
+	fmt.Fprintf(&b, "Problem: %s\nFix every problem and call %s again.", r.Problem, ToolName)
+	return b.String()
 }
 
 func ptr[T any](v T) *T { return &v }

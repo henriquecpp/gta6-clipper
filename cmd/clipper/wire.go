@@ -137,6 +137,7 @@ func newEditor(c *config.Config, log *slog.Logger) app.Editor {
 		MaxTokens:  c.Editor.MaxTokens,
 		Timeout:    c.Editor.Timeout.D(),
 		ToolChoice: c.Editor.ToolChoice,
+		Effort:     c.Editor.Effort,
 	})
 }
 

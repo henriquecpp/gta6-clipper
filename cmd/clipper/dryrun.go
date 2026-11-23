@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,18 +26,25 @@ import (
 // offlineCut is the target length of the dry-run cut (clamped to the render limits).
 const offlineCut = 30 * time.Second
 
-// dryRun validates whisper and the final render with a real retained clip
-// while the editor (Claude) is not configured:
+// dryRun validates whisper and the final render with a real retained clip:
 //
-//	clipper dryrun            list the clips that still have retained media
-//	clipper dryrun CLIP_ID    transcribe, build a plan without AI, render
+//	clipper dryrun                  list the clips that still have retained media
+//	clipper dryrun CLIP_ID          transcribe, build a plan without AI, render
+//	clipper dryrun -editor CLIP_ID  same, with the real editor (Claude: costs tokens)
 //
-// The plan is deterministic (cut around the peak, captions with the original
-// speech, no translation). The clip state is not changed and nothing is sent:
-// the video only goes to the output directory.
+// Without -editor the plan is deterministic (cut around the peak, captions
+// with the original speech, no translation). The clip state is not changed
+// and nothing is sent: the plan is printed and the video only goes to the
+// output directory.
 func dryRun(args []string, out io.Writer) error {
+	fs := flag.NewFlagSet("dryrun", flag.ContinueOnError)
+	useEditor := fs.Bool("editor", false, "plan with the real editor (Claude, costs tokens) instead of the offline plan")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	args = fs.Args()
 	if len(args) > 1 {
-		return errors.New("usage: clipper dryrun [CLIP_ID]")
+		return errors.New("usage: clipper dryrun [-editor] [CLIP_ID]")
 	}
 	cfg, err := loadConfig()
 	if err != nil {
@@ -99,14 +107,6 @@ func dryRun(args []string, out io.Writer) error {
 		HeadlineMaxChars: pc.HeadlineMaxChars,
 		Streamer:         c.Streamer,
 	}
-	plan, err := domain.NewEditPlan(offlineProposal(transcript, cons), cons)
-	if err != nil {
-		return fmt.Errorf("offline plan: %w", err)
-	}
-	plan = plan.SnapToWords(transcript, pc.SnapMargin, cons)
-	_, _ = fmt.Fprintf(out, "cut: %.2fs–%.2fs (peak at %.2fs, window %.1fs), %d captions\n", plan.Start.Seconds(),
-		plan.End.Seconds(), cons.Peak.Seconds(), cons.WindowDuration.Seconds(), len(plan.Captions))
-
 	rend := render.New(ctx, render.Config{
 		Encoder:        cfg.Render.Encoder,
 		Threads:        cfg.Concurrency.FFmpegThreadsPerJob,
@@ -115,6 +115,29 @@ func dryRun(args []string, out io.Writer) error {
 		OutputDir:      cfg.Render.OutputDir,
 		Style:          render.ASSStyle{Font: cfg.Render.Font, MaxLineChars: cfg.Render.MaxLineChars},
 	}, render.WithLogger(log))
+
+	var plan domain.EditPlan
+	if *useEditor {
+		// Same editor path as production (frames, game-language pass, one
+		// retry), nothing saved; the notifier and media are never used.
+		produce := app.NewProduceFinalClip(pc, repo, tr, newEditor(cfg, log), rend, nil, nil, clock.Real{}, log, nil, nil,
+			app.WithFrameSampler(rend))
+		t2 := time.Now()
+		var usage domain.Usage
+		plan, usage, err = produce.DraftPlan(ctx, c, transcript)
+		if err != nil {
+			return fmt.Errorf("editor plan: %w", err)
+		}
+		printPlan(out, plan, usage, pc.Pricing, time.Since(t2))
+	} else {
+		plan, err = domain.NewEditPlan(offlineProposal(transcript, cons), cons)
+		if err != nil {
+			return fmt.Errorf("offline plan: %w", err)
+		}
+		plan = plan.SnapToWords(transcript, pc.SnapMargin, cons)
+	}
+	_, _ = fmt.Fprintf(out, "cut: %.2fs–%.2fs (peak at %.2fs, window %.1fs), %d captions\n", plan.Start.Seconds(),
+		plan.End.Seconds(), cons.Peak.Seconds(), cons.WindowDuration.Seconds(), len(plan.Captions))
 	// The clip's framing (decided at preview time), or a fresh one (auto layout:
 	// facecam detection) for clips that never had a preview.
 	layout, stack := c.Layout, c.Stack
@@ -133,6 +156,17 @@ func dryRun(args []string, out io.Writer) error {
 	}
 	_, _ = fmt.Fprintf(out, "final video (%s, %s): %s\n", rend.Encoder(), time.Since(t1).Round(time.Millisecond), video)
 	return nil
+}
+
+// printPlan shows the editor's texts and cost.
+func printPlan(out io.Writer, p domain.EditPlan, u domain.Usage, pricing domain.Pricing, took time.Duration) {
+	_, _ = fmt.Fprintf(out, "editor (%s, %s; %d in, %d out, %d cache write, %d cache read):\n", u.Cost(pricing),
+		took.Round(time.Millisecond), u.InputTokens, u.OutputTokens, u.CacheWriteTokens, u.CacheReadTokens)
+	_, _ = fmt.Fprintf(out, "  headline:      %s\n  youtube_title: %s\n  post_text:     %s\n  search_tags:   %s\n  reasoning:     %s\n",
+		p.Headline, p.YouTubeTitle, p.PostText, strings.Join(p.SearchTags, " | "), p.Reasoning)
+	for _, c := range p.Captions {
+		_, _ = fmt.Fprintf(out, "  %6.2f–%6.2f  %s\n", c.Start.Seconds(), c.End.Seconds(), c.Text)
+	}
 }
 
 // offlineProposal builds a deterministic edit without AI: a cut of about

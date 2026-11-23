@@ -131,6 +131,11 @@ func (c *Config) Validate() error {
 	if e.ToolChoice != "tool" && e.ToolChoice != "auto" {
 		add("editor.tool_choice must be tool or auto")
 	}
+	switch e.Effort {
+	case "", "low", "medium", "high", "xhigh", "max":
+	default:
+		add("editor.effort must be low, medium, high, xhigh or max (got %q)", e.Effort)
+	}
 	if e.PeakTolerance < 0 {
 		add("editor.peak_tolerance must be >= 0")
 	}

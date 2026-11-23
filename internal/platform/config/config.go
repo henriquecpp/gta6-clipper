@@ -140,7 +140,10 @@ type Editor struct {
 	Timeout           Duration `yaml:"timeout"`
 	MaxCostPerClipUSD float64  `yaml:"max_cost_per_clip_usd"`
 	ToolChoice        string   `yaml:"tool_choice"`
-	PeakTolerance     Duration `yaml:"peak_tolerance"`
+	// Effort is the model's output_config.effort (low … max); empty keeps
+	// the model default.
+	Effort        string   `yaml:"effort"`
+	PeakTolerance Duration `yaml:"peak_tolerance"`
 	// FrameInterval spaces the still frames of the window the editor sees
 	// (0 disables them); MaxFrames caps how many (the spacing grows on long
 	// windows). Each 640x360 frame is about 300 input tokens.

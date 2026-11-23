@@ -458,3 +458,29 @@ func TestProduceShowsFramesToTheEditor(t *testing.T) {
 		})
 	}
 }
+
+func TestDraftPlanChangesNothing(t *testing.T) {
+	ctx := context.Background()
+	e := newProduceEnv(t)
+	sampler := &fakes.FrameSampler{}
+	e.produce = app.NewProduceFinalClip(app.ProduceConfig{
+		MinDuration: 15 * time.Second, MaxDuration: 60 * time.Second, PeakTolerance: 5 * time.Second,
+		HeadlineMaxChars: 60, SnapMargin: 150 * time.Millisecond, Pricing: pricing,
+		FrameInterval: 3 * time.Second, MaxFrames: 40,
+		Streamers: map[string]domain.Streamer{"streamer_a": {Login: "streamer_a"}},
+	}, e.repo, e.trans, e.editor, e.renderer, nil, nil, e.clock, discardLog(), nil, nil, app.WithFrameSampler(sampler))
+	c := e.approved(t, "c1")
+	plan, usage, err := e.produce.DraftPlan(ctx, c, e.trans.Transcript)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Headline != "Ele pulou da ponte!" || plan.Start != 39650*time.Millisecond || usage != (domain.Usage{InputTokens: 6000, OutputTokens: 900, CacheWriteTokens: 2000}) {
+		t.Fatalf("plan = %+v, usage = %+v", plan, usage)
+	}
+	if len(e.editor.Requests[0].Frames) != 30 {
+		t.Fatalf("frames = %d, want 30", len(e.editor.Requests[0].Frames))
+	}
+	if got := e.get(t, "c1"); got.State != domain.StateApproved || got.Plan != nil || got.Cost != 0 {
+		t.Fatalf("draft changed the clip: %s plan=%v cost=%v", got.State, got.Plan, got.Cost)
+	}
+}
