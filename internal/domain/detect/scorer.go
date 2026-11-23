@@ -70,6 +70,20 @@ func (s *Scorer) Score(pos domain.StreamPos) (float64, map[domain.SignalKind]flo
 	return score, values
 }
 
+// ReactionScore is the weighted score of the fast signals only (voice and
+// chat) at pos: how much the streamer and the chat reacted, leaving out the
+// viewer clips, whose positions are estimates.
+func (s *Scorer) ReactionScore(pos domain.StreamPos) float64 {
+	score := 0.0
+	for _, d := range s.detectors {
+		if d.Kind() == domain.SignalClips {
+			continue
+		}
+		score += s.cfg.Weights[d.Kind()] * clamp(d.Value(pos), 0, s.cfg.ZMax)
+	}
+	return score
+}
+
 // Evaluate advances every detector to pos, updates the episode state and
 // returns a moment when an episode closes.
 func (s *Scorer) Evaluate(pos domain.StreamPos) (domain.Moment, bool) {

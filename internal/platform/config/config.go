@@ -232,6 +232,9 @@ type ClipsDetection struct {
 	MinClips     int      `yaml:"min_clips"`
 	// MinZ: how far above the channel's usual clip rate a cluster must be.
 	MinZ float64 `yaml:"min_z"`
+	// Lookback: how far before a clip rain the reaction that anchors the late
+	// moment is searched (clip positions land after the event).
+	Lookback Duration `yaml:"lookback"`
 }
 
 // Secrets read from the environment (.env).

@@ -104,6 +104,7 @@ func Defaults() *Config {
 				GroupWindow:  dur(15 * time.Second),
 				MinClips:     3,
 				MinZ:         4.0,
+				Lookback:     dur(45 * time.Second),
 			},
 			Calibration: Calibration{Window: 20, StepUp: 0.25, StepDown: 0.25, MaxOffset: 1.5},
 		},

@@ -102,6 +102,15 @@ type acceptedMoment struct {
 	peak   domain.StreamPos
 	clipID domain.ClipID
 	clips  int
+	// late moments are also matched by where their viewer clips placed them.
+	late    bool
+	clipsAt domain.StreamPos
+}
+
+// matches reports whether a clip cluster at center belongs to a moment with
+// this peak (or, for a late moment, these viewer clips).
+func matches(peak domain.StreamPos, late bool, clipsAt, center, gw domain.StreamPos) bool {
+	return absPos(peak-center) <= gw || (late && absPos(clipsAt-center) <= gw)
 }
 
 // titleNote is a useful viewer clip title at the clip's estimated position.
@@ -323,7 +332,7 @@ func (d *DetectMoment) accept(ctx context.Context, s *session, m domain.Moment, 
 	d.metrics.ClipState(domain.StateDetected)
 
 	s.mu.Lock()
-	s.accepted = append(s.accepted, acceptedMoment{peak: m.Peak, clipID: id, clips: m.ViewerClips})
+	s.accepted = append(s.accepted, acceptedMoment{peak: m.Peak, clipID: id, clips: m.ViewerClips, late: m.Late, clipsAt: m.ClipsAt})
 	s.mu.Unlock()
 	d.log.Info("clip detected", append(attrs, slog.String("clip_id", string(id)))...)
 	if d.onClip != nil {
@@ -398,11 +407,23 @@ func (s *session) nearMoment(pos, cooldown domain.StreamPos) bool {
 	return false
 }
 
-// reaction is the highest voice or chat value within ±span of pos (caller holds s.mu).
-func (s *session) reaction(pos, span domain.StreamPos) float64 {
+// reaction is the highest voice or chat value in [from, to] (caller holds s.mu).
+func (s *session) reaction(from, to domain.StreamPos) float64 {
 	best := 0.0
-	for p := max(0, pos-span); p <= pos+span; p += domain.StreamPos(time.Second) {
+	for p := max(0, from); p <= to; p += domain.StreamPos(time.Second) {
 		best = max(best, s.voice.Value(p), s.chat.Value(p))
+	}
+	return best
+}
+
+// anchor is the second of [from, to] where voice and chat reacted the most
+// (the earliest one on ties); caller holds s.mu.
+func (s *session) anchor(from, to domain.StreamPos) domain.StreamPos {
+	best, bestScore := max(0, from), -1.0
+	for p := max(0, from); p <= to; p += domain.StreamPos(time.Second) {
+		if sc := s.scorer.ReactionScore(p); sc > bestScore {
+			best, bestScore = p, sc
+		}
 	}
 	return best
 }
@@ -422,6 +443,7 @@ func (d *DetectMoment) ObserveClips(ctx context.Context, id domain.StreamID, cli
 	}
 	var boosts []boost
 	gw := domain.StreamPos(d.cfg.Clips.GroupWindow)
+	lookback := max(domain.StreamPos(d.cfg.Clips.Lookback), gw)
 	zmax := s.scorer.ZMax()
 	wClips := s.scorer.Weight(domain.SignalClips)
 
@@ -453,19 +475,20 @@ func (d *DetectMoment) ObserveClips(ctx context.Context, id domain.StreamID, cli
 			value := min(float64(cl.Count), zmax)
 			handled := false
 			for i := range s.pending {
-				if absPos(s.pending[i].Peak-cl.Center) <= gw && cl.Count > s.pending[i].ViewerClips {
-					m := &s.pending[i]
+				m := &s.pending[i]
+				if !matches(m.Peak, m.Late, m.ClipsAt, cl.Center, gw) {
+					continue
+				}
+				handled = true
+				if cl.Count > m.ViewerClips {
 					m.Score += wClips * (value - m.Values[domain.SignalClips])
 					m.Values[domain.SignalClips] = value
 					m.ViewerClips = cl.Count
 				}
-				if absPos(s.pending[i].Peak-cl.Center) <= gw {
-					handled = true
-				}
 			}
 			for i := range s.accepted {
 				a := &s.accepted[i]
-				if absPos(a.peak-cl.Center) <= gw {
+				if matches(a.peak, a.late, a.clipsAt, cl.Center, gw) {
 					handled = true
 					if cl.Count > a.clips {
 						a.clips = cl.Count
@@ -479,8 +502,7 @@ func (d *DetectMoment) ObserveClips(ctx context.Context, id domain.StreamID, cli
 			// Clips of the minutes before the capture started map to negative
 			// positions: nothing was recorded there, so they never become moments
 			// (otherwise every new clip of that cluster would re-propose and drop it).
-			inBuffer := cl.Center >= 0 && cl.Center-domain.StreamPos(d.cfg.PreRoll) >= capPos-domain.StreamPos(d.cfg.BufferDuration)
-			if !inBuffer || s.nearMoment(cl.Center, domain.StreamPos(d.cfg.Scorer.Cooldown)) {
+			if cl.Center < 0 || s.nearMoment(cl.Center, domain.StreamPos(d.cfg.Scorer.Cooldown)) {
 				continue
 			}
 			// A rain is relative to the channel: a cluster that big channels
@@ -490,18 +512,27 @@ func (d *DetectMoment) ObserveClips(ctx context.Context, id domain.StreamID, cli
 			}
 			// Same gate as the fast path (§9): voice or chat must react. Viewers of
 			// big channels clip all the time; a cluster nobody reacted to is noise.
-			// The window is ±group_window because clip positions are estimates.
-			if s.reaction(cl.Center, gw) < s.scorer.MinSignalZ() {
+			// Clip positions are estimates that land after the event, so the
+			// reaction is searched mostly before the cluster.
+			from, to := cl.Center-lookback, cl.Center+gw
+			if s.reaction(from, to) < s.scorer.MinSignalZ() {
 				continue
 			}
-			score, values := s.scorer.Score(cl.Center)
+			// The moment is where the streamer and the chat reacted, not where the
+			// clips were estimated: the preview and the editor start from it.
+			peak := s.anchor(from, to)
+			if peak-domain.StreamPos(d.cfg.PreRoll) < capPos-domain.StreamPos(d.cfg.BufferDuration) ||
+				s.nearMoment(peak, domain.StreamPos(d.cfg.Scorer.Cooldown)) {
+				continue // the window already left the buffer, or that reaction is another moment's
+			}
+			score, values := s.scorer.Score(peak)
 			values[domain.SignalClips] = value
-			score += wClips * (value - min(s.clips.Value(cl.Center), zmax))
-			m := domain.Moment{Peak: cl.Center, Score: score, Values: values, ViewerClips: cl.Count, Late: true}
+			score += wClips * (value - min(s.clips.Value(peak), zmax))
+			m := domain.Moment{Peak: peak, Score: score, Values: values, ViewerClips: cl.Count, Late: true, ClipsAt: cl.Center}
 			s.pending = append(s.pending, m)
-			s.scorer.NotePeak(cl.Center)
+			s.scorer.NotePeak(peak)
 			d.log.Info("late moment from viewer clips", slog.String("streamer", s.streamer.Login),
-				slog.String("peak", cl.Center.String()), slog.Int("clips", cl.Count))
+				slog.String("peak", peak.String()), slog.String("clips_at", cl.Center.String()), slog.Int("clips", cl.Count))
 		}
 	}
 	s.mu.Unlock()

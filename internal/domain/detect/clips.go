@@ -12,6 +12,12 @@ import (
 type ClipsConfig struct {
 	// GroupWindow groups clips whose positions fall within ± this duration.
 	GroupWindow time.Duration
+	// Lookback is how far before a cluster the reaction of a late moment is
+	// searched: clip positions are estimates from Twitch's vod_offset or
+	// created_at and land up to ~30 s after the event, so the late moment
+	// is anchored on the strongest voice/chat reaction in
+	// [cluster − Lookback, cluster + GroupWindow] (ADR 0029).
+	Lookback time.Duration
 	// MinClips is how many clips make a cluster.
 	MinClips int
 	// MinZ is how far above the channel's usual clipping a cluster must be

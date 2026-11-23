@@ -145,6 +145,8 @@ detection:
     group_window: 15s
     min_clips: 3
     min_z: 4.0               # how far a clip rain must exceed the channel's usual clip rate
+    lookback: 45s            # clip positions land after the event: the late moment is anchored on the
+                             # strongest voice/chat reaction from 45 s before the clips to 15 s after
   # Your decisions calibrate each streamer: every discard adds step_up to threshold_on,
   # min_signal_z and clips.min_z of that streamer, every approval removes step_down
   # (last 'window' decisions, capped at max_offset; max_offset 0 disables it).

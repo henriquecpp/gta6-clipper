@@ -453,3 +453,64 @@ func TestDetectMomentKeepsViewerClipTitles(t *testing.T) {
 		t.Fatalf("titles after the late clip = %q, want %q", c.Moment.ClipTitles, want)
 	}
 }
+
+func TestDetectMomentLateMomentAnchorsOnTheReaction(t *testing.T) {
+	ctx := context.Background()
+	cfg := detectionConfig()
+	cfg.Clips.Lookback = 45 * time.Second
+	h := newHarness(t, true)
+	h.d = app.NewDetectMoment(cfg, h.repo, func() (domain.ClipID, error) { return "c", nil }, h.clock, discardLog(), app.WithCapture(h.capture))
+	h.d.StartStream(testStreamer, testLive, captureStart)
+	h.run(0, 200*time.Second, shoutAt(120*time.Second), h.steadyChat)
+	// The viewer clips are estimated 30 s after the shout (Twitch positions
+	// land after the event): the moment is the shout, not the clips.
+	if err := h.d.ObserveClips(ctx, testLive.ID, lateClips(150*time.Second, 3, "v")); err != nil {
+		t.Fatal(err)
+	}
+	h.run(200*time.Second, 210*time.Second, steadyVoice, h.steadyChat)
+	clips, _ := h.repo.ListByState(ctx, domain.StateDetected)
+	if len(clips) != 1 {
+		t.Fatalf("clips = %d, want 1 late clip", len(clips))
+	}
+	c := clips[0]
+	if d := time.Duration(c.Moment.Peak) - 120*time.Second; d < 0 || d > 3*time.Second || !c.Moment.Late {
+		t.Fatalf("late peak = %v (late %v), want the shout at 120 s", time.Duration(c.Moment.Peak), c.Moment.Late)
+	}
+	if c.Window.From > c.Moment.Peak-domain.StreamPos(cfg.PreRoll) {
+		t.Fatalf("window %+v does not hold the pre-roll before the peak", c.Window)
+	}
+	// More clips of the same rain (matched by where the clips are, 30 s from
+	// the peak) boost the clip instead of proposing another moment.
+	if err := h.d.ObserveClips(ctx, testLive.ID, lateClips(152*time.Second, 2, "w")); err != nil {
+		t.Fatal(err)
+	}
+	h.run(210*time.Second, 260*time.Second, steadyVoice, h.steadyChat)
+	got, _ := h.repo.Get(ctx, c.ID)
+	if h.repo.Len() != 1 || got.Moment.ViewerClips != 5 {
+		t.Fatalf("clips = %d, viewer clips = %d; want the same clip boosted to 5", h.repo.Len(), got.Moment.ViewerClips)
+	}
+}
+
+func TestDetectMomentLateReactionInsideAnotherMomentsCooldown(t *testing.T) {
+	ctx := context.Background()
+	cfg := detectionConfig()
+	cfg.Clips.Lookback = 45 * time.Second
+	h := newHarness(t, true)
+	h.d = app.NewDetectMoment(cfg, h.repo, func() (domain.ClipID, error) { return "c", nil }, h.clock, discardLog(), app.WithCapture(h.capture))
+	h.d.StartStream(testStreamer, testLive, captureStart)
+	h.run(0, 300*time.Second, shoutAt(100*time.Second, 140*time.Second), h.steadyChat)
+	step := func(from time.Duration, clips []domain.ViewerClip) {
+		t.Helper()
+		if err := h.d.ObserveClips(ctx, testLive.ID, clips); err != nil {
+			t.Fatal(err)
+		}
+		h.run(from, from+5*time.Second, steadyVoice, h.steadyChat)
+	}
+	step(300*time.Second, lateClips(100*time.Second, 3, "a")) // accepted at the 100 s shout
+	// Clips estimated at 170 s are beyond the cooldown of 100 s, but the
+	// reaction they anchor on (140 s) is inside it: no second clip.
+	step(305*time.Second, lateClips(170*time.Second, 3, "b"))
+	if n := h.repo.Len(); n != 1 {
+		t.Fatalf("clips = %d, want 1", n)
+	}
+}

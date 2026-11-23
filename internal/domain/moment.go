@@ -56,6 +56,10 @@ type Moment struct {
 	ViewerClips int
 	// Late is true when the moment came only from the late clip signal.
 	Late bool
+	// ClipsAt is where the viewer clips placed a late moment (its Peak is
+	// the reaction found before it); later clips of the same cluster are
+	// matched against it. Not persisted.
+	ClipsAt StreamPos
 	// ClipTitles are the titles viewers gave to their Twitch clips of this
 	// moment (most viewed first, at most MaxClipTitles). They are hints for
 	// the editor's headline, not facts.

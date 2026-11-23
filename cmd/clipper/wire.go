@@ -61,6 +61,7 @@ func detectionConfig(c *config.Config) app.DetectionConfig {
 			GroupWindow: d.Clips.GroupWindow.D(),
 			MinClips:    d.Clips.MinClips,
 			MinZ:        d.Clips.MinZ,
+			Lookback:    d.Clips.Lookback.D(),
 		},
 		Calibration: detect.CalibrationConfig{
 			Window: d.Calibration.Window, StepUp: d.Calibration.StepUp, StepDown: d.Calibration.StepDown, Max: d.Calibration.MaxOffset,

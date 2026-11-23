@@ -164,3 +164,16 @@ func TestScorerDefaults(t *testing.T) {
 		t.Fatalf("defaults = %+v", s.cfg)
 	}
 }
+
+func TestScorerReactionScoreLeavesClipsOut(t *testing.T) {
+	voice := &scripted{kind: domain.SignalVoice, f: func(int) float64 { return 4 }}
+	chat := &scripted{kind: domain.SignalChat, f: func(int) float64 { return 9 }} // clamped to z_max 6
+	clips := &scripted{kind: domain.SignalClips, f: func(int) float64 { return 5 }}
+	s := NewScorer(cfg(), voice, chat, clips)
+	if got, want := s.ReactionScore(at(time.Second)), 0.45*4+0.45*6; got != want {
+		t.Fatalf("reaction score = %v, want %v", got, want)
+	}
+	if full, _ := s.Score(at(time.Second)); full <= s.ReactionScore(at(time.Second)) {
+		t.Fatalf("full score %v should include the clips", full)
+	}
+}
