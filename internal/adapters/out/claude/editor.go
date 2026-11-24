@@ -134,11 +134,13 @@ func tool(strict bool) anthropic.ToolParam {
 				"type":                 "object",
 				"required":             []string{"start_s", "end_s", "text"},
 				"additionalProperties": false,
-				"properties": map[string]any{
-					"start_s": map[string]any{"type": "number"},
-					"end_s":   map[string]any{"type": "number"},
-					"text":    str("Texto em PT-BR (traduzido se a fala for em outro idioma)"),
-				},
+				// Ordered too: sorted, "end_s" came before "start_s" and the
+				// model wrote 0 as the end of the first caption.
+				"properties": orderedProps([]prop{
+					{"start_s", map[string]any{"type": "number"}},
+					{"end_s", map[string]any{"type": "number"}},
+					{"text", str("Texto em PT-BR (traduzido se a fala for em outro idioma)")},
+				}),
 			},
 		}},
 		{"headline", str("Manchete curta em PT-BR: o gancho do momento")},

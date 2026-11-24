@@ -318,4 +318,10 @@ func TestToolPropertiesKeepTheirOrder(t *testing.T) {
 		}
 		last = i
 	}
+	// Inside each caption the start comes before the end.
+	items := raw[strings.Index(raw, `"items":{`):]
+	items = items[strings.Index(items, `"properties":{`):]
+	if s, e, x := strings.Index(items, `"start_s"`), strings.Index(items, `"end_s"`), strings.Index(items, `"text"`); s < 0 || s > e || e > x {
+		t.Fatalf("caption properties out of order: %s", items[:min(len(items), 300)])
+	}
 }
