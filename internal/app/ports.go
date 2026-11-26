@@ -109,7 +109,8 @@ type Notifier interface {
 	SendFinal(ctx context.Context, c *domain.Clip, video domain.MediaRef, post domain.Post) (domain.MessageRef, error)
 	// UpdateFinal edits the final video message(s) to reflect the publication.
 	UpdateFinal(ctx context.Context, c *domain.Clip) error
-	// SendAlert sends an informational alert about a clip (e.g. cost above the limit).
+	// SendAlert sends an informational alert about a clip (e.g. cost above the
+	// limit), or about the system when c is nil (e.g. the GPU left the container).
 	SendAlert(ctx context.Context, c *domain.Clip, text string) error
 }
 

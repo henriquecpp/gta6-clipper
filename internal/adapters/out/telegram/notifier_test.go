@@ -205,8 +205,16 @@ func TestSendFinalAndAlert(t *testing.T) {
 	if err := n.SendAlert(context.Background(), c, "custo > limite"); err != nil {
 		t.Fatal(err)
 	}
-	if a := srv.Calls("sendMessage"); len(a) != 2 || !strings.Contains(a[1].Params["text"], "custo &gt; limite") {
+	if a := srv.Calls("sendMessage"); len(a) != 2 || !strings.Contains(a[1].Params["text"], "custo &gt; limite") ||
+		!strings.Contains(a[1].Params["text"], string(c.ID)) {
 		t.Fatalf("alert = %+v", a)
+	}
+	// System alerts have no clip.
+	if err := n.SendAlert(context.Background(), nil, "GPU indisponível"); err != nil {
+		t.Fatal(err)
+	}
+	if a := srv.Calls("sendMessage"); len(a) != 3 || a[2].Params["text"] != "GPU indisponível" {
+		t.Fatalf("system alert = %+v", a[len(a)-1])
 	}
 	srv.Fail("sendVideo", "Request Entity Too Large")
 	if _, err := n.SendFinal(context.Background(), c, domain.MediaRef(video), post); err == nil {

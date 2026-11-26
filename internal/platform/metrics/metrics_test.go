@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -89,5 +90,53 @@ func TestGPUSampler(t *testing.T) {
 	failing := p.NewGPUSampler(func(context.Context) ([]byte, error) { return nil, errors.New("no nvidia-smi") }, nil)
 	if err := failing.Sample(context.Background()); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestGPUSamplerReportsTheGPULeavingAndComingBack(t *testing.T) {
+	ctx := context.Background()
+	var gpuErr error
+	s := New().NewGPUSampler(func(context.Context) ([]byte, error) {
+		if gpuErr != nil {
+			return nil, gpuErr
+		}
+		return []byte("10, 1024\n"), nil
+	}, nil)
+	var changes []bool
+	s.OnChange(func(_ context.Context, up bool) { changes = append(changes, up) })
+	sample := func() error {
+		t.Helper()
+		return s.Sample(ctx)
+	}
+
+	if err := sample(); err != nil || len(changes) != 0 {
+		t.Fatalf("healthy sample: err=%v changes=%v", err, changes)
+	}
+	gpuErr = errors.New("nvidia-smi: exit status 255")
+	if err := sample(); err == nil || len(changes) != 0 {
+		t.Fatalf("one failure is a hiccup: err=%v changes=%v", err, changes)
+	}
+	if err := sample(); err == nil || !slices.Equal(changes, []bool{false}) {
+		t.Fatalf("second failure: err=%v changes=%v", err, changes)
+	}
+	// Already reported: no more errors to log, no more alerts.
+	for range 3 {
+		if err := sample(); err != nil {
+			t.Fatalf("down sample err = %v", err)
+		}
+	}
+	if !slices.Equal(changes, []bool{false}) {
+		t.Fatalf("changes = %v", changes)
+	}
+	gpuErr = nil
+	if err := sample(); err != nil || !slices.Equal(changes, []bool{false, true}) {
+		t.Fatalf("recovery: err=%v changes=%v", err, changes)
+	}
+	// A single failure after the recovery is not a new alert.
+	gpuErr = errors.New("again")
+	_ = sample() // the error is the expected hiccup
+	gpuErr = nil
+	if err := sample(); err != nil || !slices.Equal(changes, []bool{false, true}) {
+		t.Fatalf("hiccup after recovery: err=%v changes=%v", err, changes)
 	}
 }

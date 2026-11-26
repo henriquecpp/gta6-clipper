@@ -233,13 +233,18 @@ func (n *Notifier) UpdateFinal(ctx context.Context, c *domain.Clip) error {
 	return errors.Join(errs...)
 }
 
-// SendAlert sends an informational message about a clip.
+// SendAlert sends an informational message about a clip, or about the
+// system when c is nil.
 func (n *Notifier) SendAlert(ctx context.Context, c *domain.Clip, text string) error {
+	msg := esc(text)
+	if c != nil {
+		msg += fmt.Sprintf("\nClipe: <code>%s</code> (%s)", esc(string(c.ID)), esc(c.Streamer))
+	}
 	var errs []error
 	for _, chat := range n.chats {
 		_, err := n.bot.SendMessage(ctx, &telego.SendMessageParams{
 			ChatID: telego.ChatID{ID: chat}, ParseMode: telego.ModeHTML,
-			Text: truncate(fmt.Sprintf("%s\nClipe: <code>%s</code> (%s)", esc(text), esc(string(c.ID)), esc(c.Streamer)), 4000),
+			Text: truncate(msg, 4000),
 		})
 		if err != nil {
 			errs = append(errs, n.redact(err))

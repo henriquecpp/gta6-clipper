@@ -174,6 +174,10 @@ func (p *Publisher) Count() int {
 func (n *Notifier) SendAlert(_ context.Context, c *domain.Clip, text string) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	if c == nil {
+		n.Alerts = append(n.Alerts, text)
+		return nil
+	}
 	n.Alerts = append(n.Alerts, string(c.ID)+": "+text)
 	return nil
 }

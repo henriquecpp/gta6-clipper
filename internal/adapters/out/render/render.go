@@ -1,7 +1,7 @@
 // Package render implements the Renderer port with ffmpeg: the low-resolution
 // preview and (Phase 5) the final 9:16 video with burned-in ASS subtitles.
 // h264_nvenc is used when available (detected at startup), with automatic
-// fallback to libx264.
+// fallback to libx264, also per job when NVENC fails later.
 package render
 
 import (
@@ -112,6 +112,29 @@ func (r *Renderer) detectEncoder(ctx context.Context) string {
 	return EncoderNVENC
 }
 
+// encode runs one ffmpeg job with the selected encoder. When h264_nvenc fails
+// at runtime (2026-11-25: a driver update took the GPU away from the WSL VM
+// and ffmpeg crashed in cuInit), the job is redone with libx264: slower, but
+// the video still comes out.
+func (r *Renderer) encode(ctx context.Context, args func(encoder string) []string) error {
+	_, err := r.run(ctx, args(r.encoder)...)
+	if err == nil || r.encoder != EncoderNVENC || ctx.Err() != nil || !gpuFailure(err) {
+		return err
+	}
+	r.log.Warn("h264_nvenc failed; redoing the job with libx264", slog.String("err", err.Error()))
+	if _, x264Err := r.run(ctx, args(EncoderX264)...); x264Err != nil {
+		return fmt.Errorf("h264_nvenc failed (%w), and libx264 too: %w", err, x264Err)
+	}
+	return nil
+}
+
+// gpuFailure tells whether an ffmpeg error comes from NVENC or CUDA (the
+// encoder prefixes its messages with "[h264_nvenc @ ...]").
+func gpuFailure(err error) bool {
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "nvenc") || strings.Contains(s, "cuda") || strings.Contains(s, "nvidia")
+}
+
 // Encoder returns the encoder in use.
 func (r *Renderer) Encoder() string { return r.encoder }
 
@@ -178,7 +201,9 @@ func (r *Renderer) Preview(ctx context.Context, src domain.MediaRef, spec domain
 	}
 	out := previewPath(src)
 	graph := filterGraph(spec.Layout, spec.Stack, spec.Width, spec.Height, fps, spec.Start, spec.Start+spec.Duration, "")
-	if _, err := r.run(ctx, previewArgs(string(src), out, graph, spec, r.encoder, r.cfg.Threads)...); err != nil {
+	if err := r.encode(ctx, func(enc string) []string {
+		return previewArgs(string(src), out, graph, spec, enc, r.cfg.Threads)
+	}); err != nil {
 		_ = os.Remove(out) // partial output
 		return "", fmt.Errorf("render preview of %s: %w", src, err)
 	}

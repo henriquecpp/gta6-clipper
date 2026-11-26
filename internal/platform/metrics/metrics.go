@@ -162,11 +162,51 @@ func (p *Prometheus) SetNVENC(ok bool) {
 // ExternalError counts an error from an external port.
 func (p *Prometheus) ExternalError(port string) { p.externalErrors.WithLabelValues(port).Inc() }
 
-// GPUSampler polls nvidia-smi (DCGM may not work on WSL2).
+// GPUSampler polls nvidia-smi (DCGM may not work on WSL2) and reports when the
+// GPU leaves the container and when it comes back. A driver update on Windows
+// takes the GPU away from the WSL VM until it restarts (2026-11-25).
 type GPUSampler struct {
-	p   *Prometheus
-	run func(ctx context.Context) ([]byte, error)
-	log *slog.Logger
+	p        *Prometheus
+	run      func(ctx context.Context) ([]byte, error)
+	log      *slog.Logger
+	onChange func(ctx context.Context, up bool)
+	failures int
+	down     bool
+}
+
+// gpuDownAfter consecutive failed samples mark the GPU as gone (one failure
+// can be a hiccup).
+const gpuDownAfter = 2
+
+// OnChange registers f, called once when the GPU becomes unavailable
+// (up=false) and once when it comes back.
+func (s *GPUSampler) OnChange(f func(ctx context.Context, up bool)) { s.onChange = f }
+
+// failed counts a failed sample and reports whether the error is still news
+// (false once the GPU is known to be down, so the log is not flooded).
+func (s *GPUSampler) failed(ctx context.Context) bool {
+	if s.down {
+		return false
+	}
+	s.failures++
+	if s.failures >= gpuDownAfter {
+		s.down = true
+		if s.onChange != nil {
+			s.onChange(ctx, false)
+		}
+	}
+	return true
+}
+
+// succeeded resets the failures and reports a recovery.
+func (s *GPUSampler) succeeded(ctx context.Context) {
+	s.failures = 0
+	if s.down {
+		s.down = false
+		if s.onChange != nil {
+			s.onChange(ctx, true)
+		}
+	}
 }
 
 // NewGPUSampler builds a sampler; run executes
@@ -175,12 +215,16 @@ func (p *Prometheus) NewGPUSampler(run func(ctx context.Context) ([]byte, error)
 	return &GPUSampler{p: p, run: run, log: log}
 }
 
-// Sample reads the GPU once.
+// Sample reads the GPU once. Samples run one at a time (scheduler task).
 func (s *GPUSampler) Sample(ctx context.Context) error {
 	out, err := s.run(ctx)
 	if err != nil {
+		if ctx.Err() != nil || !s.failed(ctx) {
+			return nil // shutting down, or already reported as down
+		}
 		return err
 	}
+	s.succeeded(ctx)
 	util, memMiB, ok := parseNvidiaSMI(out)
 	if !ok {
 		return nil

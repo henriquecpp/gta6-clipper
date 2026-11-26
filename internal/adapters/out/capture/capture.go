@@ -38,6 +38,9 @@ type Config struct {
 	// Threads per short ffmpeg job; Workers bounds concurrent short jobs.
 	Threads int
 	Workers int
+	// StallTimeout stops a capture that received no audio for this long, so
+	// it is restarted (0 disables). Longer than an ad break.
+	StallTimeout time.Duration
 	// FFmpeg and Streamlink binaries (looked up on PATH).
 	FFmpeg     string
 	Streamlink string
@@ -136,8 +139,12 @@ func (c *Capture) Capture(ctx context.Context, live domain.LiveStream, captureSt
 	}()
 	posBase := domain.StreamPos(c.now().Sub(captureStart))
 
-	src := c.source(ctx, live)
-	ff := proc.Command(ctx, c.cfg.FFmpeg, ffmpegCaptureArgs(dir, run, c.cfg.SegmentDuration, sampleRate)...)
+	// The stall watchdog cancels runCtx to stop a source that hangs without
+	// exiting; the supervisor then restarts the capture.
+	runCtx, stopRun := context.WithCancel(ctx)
+	defer stopRun()
+	src := c.source(runCtx, live)
+	ff := proc.Command(runCtx, c.cfg.FFmpeg, ffmpegCaptureArgs(dir, run, c.cfg.SegmentDuration, sampleRate)...)
 	srcErr := &proc.TailBuffer{Max: proc.DefaultStderrBytes}
 	ffErr := &proc.TailBuffer{Max: proc.DefaultStderrBytes}
 	src.Stderr, ff.Stderr = srcErr, ffErr
@@ -176,6 +183,14 @@ func (c *Capture) Capture(ctx context.Context, live domain.LiveStream, captureSt
 	c.log.Info("capture started", slog.String("streamer", live.Login), slog.String("stream_id", string(live.ID)),
 		slog.Int("run", run), slog.String("pos_base", posBase.String()))
 
+	watch := newStallWatch(c.cfg.StallTimeout, c.now)
+	watchDone := make(chan struct{})
+	go func() {
+		defer close(watchDone)
+		if c.cfg.StallTimeout > 0 {
+			watch.run(runCtx, stopRun)
+		}
+	}()
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
@@ -186,16 +201,24 @@ func (c *Capture) Capture(ctx context.Context, live domain.LiveStream, captureSt
 	frames := 0
 	go func() {
 		defer wg.Done()
-		frames = c.readPCM(pcm, posBase, onFrame)
+		frames = c.readPCM(pcm, posBase, func(f domain.AudioFrame) {
+			watch.progress()
+			onFrame(f)
+		})
 	}()
 
 	srcWaitErr := src.Wait()
 	wg.Wait() // readers finish at EOF, after ffmpeg flushed its outputs
 	ffWaitErr := ff.Wait()
+	stopRun()
+	<-watchDone
 	c.log.Info("capture ended", slog.String("streamer", live.Login), slog.String("stream_id", string(live.ID)),
 		slog.Int("run", run), slog.Int("audio_frames", frames))
 	if ctx.Err() != nil {
 		return ctx.Err()
+	}
+	if watch.stalled.Load() {
+		return fmt.Errorf("%w for %s (source: %s)", ErrStalled, c.cfg.StallTimeout, srcErr.LastLines(3))
 	}
 	var errs []error
 	if srcWaitErr != nil {

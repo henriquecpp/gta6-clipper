@@ -26,6 +26,7 @@ capture:
   buffer_duration: 10m
   buffer_max_bytes: 4GiB
   segment_duration: 2s
+  stall_timeout: 5m          # sem áudio por esse tempo = captura travada: reinicia (0 desliga; >= 1m, acima de um intervalo de anúncios)
 
 approval:
   ttl: 6h

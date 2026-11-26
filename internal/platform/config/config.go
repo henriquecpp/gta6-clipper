@@ -79,6 +79,8 @@ type Capture struct {
 	BufferDuration  Duration `yaml:"buffer_duration"`
 	BufferMaxBytes  ByteSize `yaml:"buffer_max_bytes"`
 	SegmentDuration Duration `yaml:"segment_duration"`
+	// StallTimeout restarts a capture without audio for this long (0 = off).
+	StallTimeout Duration `yaml:"stall_timeout"`
 }
 
 // Approval settings.

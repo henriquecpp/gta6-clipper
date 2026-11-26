@@ -104,6 +104,7 @@ func TestValidationErrors(t *testing.T) {
 		"tool choice":      "editor: {tool_choice: any}",
 		"file too big":     "render: {max_file_bytes: 60MiB}",
 		"buffer too short": "capture: {buffer_duration: 30s}",
+		"stall too short":  "capture: {stall_timeout: 20s}",
 		"poll too fast":    "twitch: {live_poll_interval: 5s}",
 		"preview before":   "render: {preview_duration: 30s, preview_before: 30s}",
 		"blank game":       "twitch: {games: [' ']}",

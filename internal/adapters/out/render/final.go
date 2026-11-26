@@ -183,7 +183,9 @@ func (r *Renderer) Final(ctx context.Context, src domain.MediaRef, spec domain.R
 
 	var lastErr error
 	for _, factor := range []float64{1, 0.8} {
-		if _, err := r.run(ctx, finalArgs(string(src), out, graph, spec, r.encoder, r.cfg.Threads, factor)...); err != nil {
+		if err := r.encode(ctx, func(enc string) []string {
+			return finalArgs(string(src), out, graph, spec, enc, r.cfg.Threads, factor)
+		}); err != nil {
 			_ = os.Remove(out) // partial output
 			return "", fmt.Errorf("render final of %s: %w", spec.ClipID, err)
 		}

@@ -37,6 +37,15 @@ import (
 
 func configPath() string { return envOr("CLIPPER_CONFIG", "/etc/clipper/config.yaml") }
 
+// Telegram alerts when the GPU leaves the container and comes back. A driver
+// update on Windows takes the GPU away from the WSL VM until it restarts.
+const (
+	gpuGoneAlert = "⚠️ A GPU sumiu do container. Prévias e vídeos finais seguem na CPU (mais lentos), " +
+		"mas a transcrição (whisper) pode parar até ela voltar.\n" +
+		"Se o driver da NVIDIA foi atualizado: feche o Docker Desktop, rode wsl --shutdown e abra o Docker Desktop de novo."
+	gpuBackAlert = "✅ A GPU voltou ao container. Toque em 🔁 Tentar de novo nos clipes que falharam enquanto ela estava fora."
+)
+
 func loadConfig() (*config.Config, error) {
 	return config.Load(configPath(), os.Getenv)
 }
@@ -79,6 +88,7 @@ func runService(_ []string, stderr io.Writer) error {
 		Frame:           cfg.Detection.Voice.Frame.D(),
 		Threads:         cfg.Concurrency.FFmpegThreadsPerJob,
 		Workers:         cfg.Concurrency.FFmpegWorkers,
+		StallTimeout:    cfg.Capture.StallTimeout.D(),
 	}, capture.WithLogger(log))
 	if err != nil {
 		return err
@@ -149,6 +159,18 @@ func runService(_ []string, stderr io.Writer) error {
 	gpu := prom.NewGPUSampler(func(ctx context.Context) ([]byte, error) {
 		return proc.Run(ctx, nil, "nvidia-smi", "--query-gpu=utilization.gpu,memory.used", "--format=csv,noheader,nounits")
 	}, log)
+	gpu.OnChange(func(ctx context.Context, up bool) {
+		text := gpuBackAlert
+		if up {
+			log.Info("GPU back in the container")
+		} else {
+			text = gpuGoneAlert
+			log.Error("GPU unavailable in the container: NVENC falls back to libx264 and whisper stops until it returns")
+		}
+		if err := notifier.SendAlert(ctx, nil, text); err != nil {
+			log.Warn("send GPU alert", logging.Err(err))
+		}
+	})
 	tasks := []scheduler.Task{
 		{Name: "expire-previews", Interval: time.Minute, Immediate: true, Run: decisions.ExpireTask},
 		{Name: "gpu-metrics", Interval: 15 * time.Second, Immediate: true, Run: gpu.Sample},

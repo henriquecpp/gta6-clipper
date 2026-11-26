@@ -19,6 +19,7 @@ func Defaults() *Config {
 			BufferDuration:  dur(10 * time.Minute),
 			BufferMaxBytes:  4 << 30,
 			SegmentDuration: dur(2 * time.Second),
+			StallTimeout:    dur(5 * time.Minute),
 		},
 		Approval: Approval{TTL: dur(6 * time.Hour)},
 		Concurrency: Concurrency{

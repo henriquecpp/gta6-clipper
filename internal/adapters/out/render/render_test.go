@@ -63,7 +63,9 @@ type fakeFFmpeg struct {
 	encoders string
 	failTest bool
 	failAll  bool
-	write    int // bytes written to the output file
+	// failNVENC fails the jobs encoded with h264_nvenc (not the startup test).
+	failNVENC error
+	write     int // bytes written to the output file
 }
 
 func (f *fakeFFmpeg) run(_ context.Context, args ...string) ([]byte, error) {
@@ -73,8 +75,14 @@ func (f *fakeFFmpeg) run(_ context.Context, args ...string) ([]byte, error) {
 	if slices.Contains(args, "-encoders") {
 		return []byte(f.encoders), nil
 	}
-	if slices.Contains(args, "testsrc2=size=640x360:rate=30") && f.failTest {
-		return nil, errors.New("Cannot load libnvidia-encode.so.1")
+	if slices.Contains(args, "testsrc2=size=640x360:rate=30") {
+		if f.failTest {
+			return nil, errors.New("Cannot load libnvidia-encode.so.1")
+		}
+		return nil, nil
+	}
+	if f.failNVENC != nil && encoderOf(args) == EncoderNVENC {
+		return nil, f.failNVENC
 	}
 	if f.failAll {
 		return nil, errors.New("ffmpeg failed")
@@ -83,6 +91,67 @@ func (f *fakeFFmpeg) run(_ context.Context, args ...string) ([]byte, error) {
 		return nil, os.WriteFile(out, make([]byte, f.write), 0o600)
 	}
 	return nil, nil
+}
+
+// encoderOf returns the -c:v of an ffmpeg command line.
+func encoderOf(args []string) string {
+	if i := slices.Index(args, "-c:v"); i >= 0 && i+1 < len(args) {
+		return args[i+1]
+	}
+	return ""
+}
+
+func TestNVENCFailureRedoesTheJobWithX264(t *testing.T) {
+	dir := t.TempDir()
+	src := domain.MediaRef(filepath.Join(dir, "clip.ts"))
+	f := &fakeFFmpeg{encoders: "h264_nvenc", write: 1000}
+	r := New(context.Background(), Config{Encoder: EncoderNVENC, OutputDir: dir}, withRunner(f.run),
+		WithLogger(slog.New(slog.DiscardHandler)))
+	if !r.NVENC() {
+		t.Fatal("nvenc must pass the startup check")
+	}
+	// The GPU left after the startup check: ffmpeg crashes in cuInit.
+	f.failNVENC = errors.New("ffmpeg: signal: segmentation fault (core dumped): [h264 @ 0x5a] mmco: unref short failure | " +
+		"[h264_nvenc @ 0x5a] dl_fn->cuda_dl->cuInit(0) failed")
+	encoders := func(from int) []string {
+		var out []string
+		for _, c := range f.calls[from:] {
+			out = append(out, encoderOf(c))
+		}
+		return out
+	}
+
+	n := len(f.calls)
+	if _, err := r.Preview(context.Background(), src, previewSpec); err != nil {
+		t.Fatal(err)
+	}
+	if got := encoders(n); !slices.Equal(got, []string{EncoderNVENC, EncoderX264}) {
+		t.Fatalf("preview encoders = %v", got)
+	}
+	n = len(f.calls)
+	if _, err := r.Final(context.Background(), src, sampleSpec()); err != nil {
+		t.Fatal(err)
+	}
+	if got := encoders(n); !slices.Equal(got, []string{EncoderNVENC, EncoderX264}) {
+		t.Fatalf("final encoders = %v", got)
+	}
+
+	// Failures that are not the GPU's are not redone.
+	f.failNVENC = errors.New("ffmpeg: exit status 1: /pending/clip.ts: No such file or directory")
+	n = len(f.calls)
+	if _, err := r.Preview(context.Background(), src, previewSpec); err == nil {
+		t.Fatal("expected the ffmpeg error")
+	}
+	if got := encoders(n); !slices.Equal(got, []string{EncoderNVENC}) {
+		t.Fatalf("encoders = %v, want only nvenc", got)
+	}
+	// Both encoders failing reports both errors.
+	f.failNVENC = errors.New("[h264_nvenc @ 0x1] OpenEncodeSessionEx failed")
+	f.failAll = true
+	_, err := r.Preview(context.Background(), src, previewSpec)
+	if err == nil || !strings.Contains(err.Error(), "OpenEncodeSessionEx") || !strings.Contains(err.Error(), "ffmpeg failed") {
+		t.Fatalf("err = %v", err)
+	}
 }
 
 func newTestRenderer(f *fakeFFmpeg, enc string) *Renderer {

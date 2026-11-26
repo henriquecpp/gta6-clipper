@@ -202,6 +202,8 @@ twitch:
   `render.preview_before` (25 s) antes do pico e o resto depois, para mostrar a reação do streamer; o trecho
   depois do pico só existe até `detection.post_roll`.
 - **`approval.ttl`** (6 h): prévias não decididas expiram e a mídia é apagada.
+- **`capture.stall_timeout`** (5 min): uma captura sem áudio por esse tempo (streamlink travado depois de uma
+  queda de rede) é encerrada e reiniciada. Mínimo 1 min, acima de um intervalo de anúncios; `0` desliga.
 - **`render`**: resolução, fps (30/60), duração mínima/máxima do corte, `max_file_bytes` (≤ 50 MiB, limite
   do Telegram), fonte e caracteres por linha da legenda.
 - **`editor`**: `max_tokens`, `timeout`, `max_cost_per_clip_usd` (alerta), `tool_choice` (`auto`: o modelo
@@ -447,6 +449,7 @@ Endpoints internos (só em `localhost`): `/healthz`, `/readyz`, `/metrics`.
 | `no kernel image is available` no whisper | Build sem `CMAKE_CUDA_ARCHITECTURES=120` ou CUDA < 12.8. Use o `deploy/whisper.Dockerfile` (CUDA 12.8.1, sm_120) e `task build`. |
 | `h264_nvenc` ausente / `Cannot load libnvidia-encode.so.1` | O container precisa da capability `video` (já no `docker-compose.yml`); atualize o driver. O app cai sozinho para `libx264` (`clipper_nvenc_available 0`). |
 | `docker run --gpus all ... nvidia-smi` falha | Docker Desktop sem backend WSL2 ou driver antigo; `wsl --update` e reinicie o Docker Desktop. |
+| Aviso "A GPU sumiu do container" no Telegram; whisper parado com `no adapters were found`; NVENC com `cuInit(0) failed` | O driver da NVIDIA foi atualizado com o Docker rodando e a VM do WSL perdeu a GPU. Feche o Docker Desktop, rode `wsl --shutdown`, abra o Docker Desktop e confira com `task gpu:check`. Enquanto isso, prévias e vídeos finais saem pela CPU; depois use 🔁 nos clipes que falharam. |
 | whisper responde 503 | Ainda carregando o modelo (~10 s); o app repete. Se persistir: `task whisper:model` (modelo ausente). |
 | Lives não aparecem | `TWITCH_CLIENT_ID/SECRET` ausentes (log de modo degradado) ou login errado na allowlist; `allows_clips: false` ignora o canal. Live em outra categoria fica fora (`live not monitored: game outside the list` no log e no `/status`): confira `twitch.games`. |
 | "twitch user token unavailable/invalid" | Rode `task auth:twitch`. Sem ele só o chat fica desligado. |
@@ -454,7 +457,7 @@ Endpoints internos (só em `localhost`): `/healthz`, `/readyz`, `/metrics`.
 | Prévias não chegam | Token/chat id do Telegram; mande `/status` ao bot. Webhook ativo impede o long polling (`deleteWebhook`). |
 | Clipe `failed` com "anthropic is not configured" | Preencha `ANTHROPIC_API_KEY`/`ANTHROPIC_MODEL` e use `/retry`. |
 | Erro 400 do Claude sobre `tool_choice` | Modelo que não aceita tool use forçado: `editor.tool_choice: auto`. |
-| Captura reinicia em loop | Live offline/raid ou intervalo comercial; veja `capture stopped; restarting` nos logs. O polling de lives encerra o supervisor quando a live acaba. |
+| Captura reinicia em loop | Live offline/raid ou intervalo comercial; veja `capture stopped; restarting` nos logs. O polling de lives encerra o supervisor quando a live acaba. `capture stalled: no audio` é o watchdog (`capture.stall_timeout`) reiniciando uma captura parada. |
 | Memória do WSL2 esgotada | Aumente `memory` no `.wslconfig` ou reduza `capture.buffer_max_bytes` e o `size` do tmpfs em `docker-compose.yml`. |
 | Scripts falham no container com `\r` | Fins de linha: mantenha o `.gitattributes` (`eol=lf`) e reclone se necessário. |
 | Aviso `volume "whisper-models" already exists but was not created by Docker Compose` | Inofensivo: o volume foi criado fora do Compose (ex.: download manual do modelo). |

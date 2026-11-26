@@ -178,3 +178,31 @@ func TestCaptureCancelCleansUp(t *testing.T) {
 		t.Fatalf("buffer not cleaned: %v", entries)
 	}
 }
+
+// A source that hangs without writing anything is stopped by the stall
+// watchdog, so the supervisor can restart the capture.
+func TestCaptureStalledSourceIsStopped(t *testing.T) {
+	dir := t.TempDir()
+	c, err := New(Config{
+		BufferDir: filepath.Join(dir, "buffer"), PendingDir: filepath.Join(dir, "pending"),
+		BufferDuration: 10 * time.Minute, MaxBytes: 1 << 30, SegmentDuration: 2 * time.Second,
+		Frame: 30 * time.Millisecond, Threads: 2, Workers: 1, StallTimeout: 2 * time.Second,
+	}, WithLogger(slog.New(slog.DiscardHandler)), WithSource(func(ctx context.Context, _ domain.LiveStream) *exec.Cmd {
+		return proc.Command(ctx, "sleep", "600")
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- c.Capture(context.Background(), domain.LiveStream{ID: "s3"}, time.Now(), func(domain.AudioFrame) {})
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, ErrStalled) {
+			t.Fatalf("Capture = %v, want ErrStalled", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("stalled capture was not stopped")
+	}
+}

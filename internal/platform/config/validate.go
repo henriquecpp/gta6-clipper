@@ -62,6 +62,10 @@ func (c *Config) Validate() error {
 	if c.Capture.BufferMaxBytes <= 0 {
 		add("capture.buffer_max_bytes must be > 0")
 	}
+	// Shorter than an ad break (up to 3 min without audio) would restart healthy captures.
+	if d := c.Capture.StallTimeout.D(); d < 0 || (d > 0 && d < time.Minute) {
+		add("capture.stall_timeout must be 0 (off) or >= 1m, got %s", d)
+	}
 	if c.Capture.BufferDuration.D() < c.Detection.PreRoll.D()+c.Detection.PostRoll.D()+c.Capture.SegmentDuration.D() {
 		add("capture.buffer_duration (%s) must exceed detection.pre_roll + post_roll + one segment", c.Capture.BufferDuration.D())
 	}
