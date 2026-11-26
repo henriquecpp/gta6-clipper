@@ -34,6 +34,23 @@ func TestNewEditPlanValid(t *testing.T) {
 	}
 }
 
+// The streamer may say nothing in the cut (eating, watching a cutscene):
+// no captions is a valid plan, and speech that merely contains parentheses
+// is still speech.
+func TestNewEditPlanWithoutSpeech(t *testing.T) {
+	p := validProposal()
+	p.Captions = nil
+	plan, err := NewEditPlan(p, constraints)
+	if err != nil || len(plan.Captions) != 0 {
+		t.Fatalf("plan = %+v, err = %v", plan, err)
+	}
+	p = validProposal()
+	p.Captions[0].Text = "(calma) eu vi isso"
+	if _, err := NewEditPlan(p, constraints); err != nil {
+		t.Fatalf("speech with parentheses rejected: %v", err)
+	}
+}
+
 func TestNewEditPlanInvalid(t *testing.T) {
 	cases := map[string]func(p *EditProposal){
 		"end before start":   func(p *EditProposal) { p.StartS, p.EndS = 50, 45 },
@@ -46,8 +63,10 @@ func TestNewEditPlanInvalid(t *testing.T) {
 		"long headline":      func(p *EditProposal) { p.Headline = strings.Repeat("á", 41) },
 		"no credit":          func(p *EditProposal) { p.PostText = "Momento insano" },
 		"empty post":         func(p *EditProposal) { p.PostText = "" },
-		"no captions":        func(p *EditProposal) { p.Captions = nil },
 		"caption outside":    func(p *EditProposal) { p.Captions[0].StartS = 35 },
+		"stage direction":    func(p *EditProposal) { p.Captions[0].Text = "(comendo melancia na live)" },
+		"sound effect":       func(p *EditProposal) { p.Captions[1].Text = " *grita* " },
+		"bracketed":          func(p *EditProposal) { p.Captions[1].Text = "[risos]" },
 		"caption overlap":    func(p *EditProposal) { p.Captions[1].StartS = 43 },
 		"caption inverted":   func(p *EditProposal) { p.Captions[0].EndS = 41 },
 		"caption empty text": func(p *EditProposal) { p.Captions[0].Text = "" },

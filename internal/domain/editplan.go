@@ -181,6 +181,8 @@ func NewEditPlan(p EditProposal, c EditConstraints) (EditPlan, error) {
 			add("caption %d: need start_s < end_s", i)
 		case text == "":
 			add("caption %d: empty text", i)
+		case stageDirection(text):
+			add("caption %d %q describes the scene instead of quoting speech: captions are only words the streamer says (send an empty list when they say nothing)", i, text)
 		case cs < start || ce > end:
 			add("caption %d (%.2f–%.2f) is outside the cut (%.2f–%.2f)", i, pc.StartS, pc.EndS, p.StartS, p.EndS)
 		case cs < prevEnd:
@@ -191,14 +193,31 @@ func NewEditPlan(p EditProposal, c EditConstraints) (EditPlan, error) {
 		}
 		captions = append(captions, Caption{Start: cs, End: ce, Text: text})
 	}
-	if len(p.Captions) == 0 {
-		add("captions are empty")
-	}
+	// No captions is valid: the streamer may say nothing in the cut (eating,
+	// watching a cutscene). Requiring one made the editor write stage
+	// directions like "(comendo melancia na live)" to pass (ADR 0032).
 	if len(problems) > 0 {
 		return EditPlan{}, fmt.Errorf("%w: %s", ErrInvalidEditPlan, strings.Join(problems, "; "))
 	}
 	return EditPlan{Start: start, End: end, Headline: headline, Captions: captions, PostText: post, Reasoning: strings.TrimSpace(p.Reasoning),
 		YouTubeTitle: youtubeTitle(p.YouTubeTitle), SearchTags: searchTags(p.SearchTags)}, nil
+}
+
+// stageDirection reports whether a caption is a description wrapped in
+// parentheses, brackets or asterisks ("(risos)", "*grita*") instead of speech.
+func stageDirection(s string) bool {
+	if len(s) < 2 {
+		return false
+	}
+	switch s[0] {
+	case '(':
+		return s[len(s)-1] == ')'
+	case '[':
+		return s[len(s)-1] == ']'
+	case '*':
+		return s[len(s)-1] == '*'
+	}
+	return false
 }
 
 // youtubeTitle cleans the YouTube title. It is optional metadata: a bad one

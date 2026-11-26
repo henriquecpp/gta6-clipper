@@ -129,7 +129,7 @@ func tool(strict bool) anthropic.ToolParam {
 		{"end_s", num("Fim do corte, em segundos relativos à janela")},
 		{"captions", map[string]any{
 			"type":        "array",
-			"description": "Legendas da fala do streamer dentro do corte, em ordem",
+			"description": "Legendas da fala do streamer dentro do corte, em ordem (vazia se ele não fala nada)",
 			"items": map[string]any{
 				"type":                 "object",
 				"required":             []string{"start_s", "end_s", "text"},

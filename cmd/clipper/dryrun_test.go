@@ -39,7 +39,7 @@ func TestOfflineProposalIsAValidPlan(t *testing.T) {
 			words: words(0, time.Second, 800*time.Millisecond, 90), wantS: 60 * time.Second, wantE: 90 * time.Second, minCap: 5},
 		{name: "short window", mod: func(c *domain.EditConstraints) { c.WindowDuration, c.Peak = 20*time.Second, 15*time.Second },
 			words: words(0, time.Second, 900*time.Millisecond, 20), wantS: 0, wantE: 20 * time.Second, minCap: 2},
-		{name: "no speech", words: nil, wantS: 48 * time.Second, wantE: 78 * time.Second, minCap: 1},
+		{name: "no speech", words: nil, wantS: 48 * time.Second, wantE: 78 * time.Second, minCap: 0},
 		{name: "overlapping word times", words: []domain.Word{
 			{Text: "a", Start: 50 * time.Second, End: 52 * time.Second},
 			{Text: "b", Start: 51 * time.Second, End: 55 * time.Second},

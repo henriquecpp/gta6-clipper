@@ -207,9 +207,6 @@ func offlineProposal(t domain.Transcript, c domain.EditConstraints) domain.EditP
 		gEnd = w.End
 	}
 	flush()
-	if len(caps) == 0 {
-		caps = []domain.ProposedCaption{{StartS: start.Seconds(), EndS: end.Seconds(), Text: "(sem fala detectada)"}}
-	}
 
 	headline := "Teste sem IA — " + c.Streamer
 	if c.HeadlineMaxChars > 0 && utf8.RuneCountInString(headline) > c.HeadlineMaxChars {
