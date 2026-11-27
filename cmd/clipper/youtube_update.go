@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os/signal"
 	"slices"
+	"strings"
 	"syscall"
 
 	"github.com/henriquecpp/gta6-clipper/internal/adapters/out/sqlite"
@@ -90,7 +91,11 @@ func youtubeUpdate(args []string, out io.Writer) error {
 		_, _ = fmt.Fprintf(out, "\n▶ %s (%s, clipe %s)\n", c.PublishedURL, c.Streamer, c.ID)
 		printChange(out, "Título", cur.Title, meta.Title)
 		printChange(out, "Descrição", cur.Description, meta.Description)
-		_, _ = fmt.Fprintf(out, "  Tags: %d → %d\n", len(cur.Tags), len(meta.Tags))
+		if added, removed := tagsDiff(cur.Tags, meta.Tags); len(added)+len(removed) == 0 {
+			_, _ = fmt.Fprintln(out, "  Tags: (iguais)")
+		} else {
+			_, _ = fmt.Fprintf(out, "  Tags: + %q  − %q\n", added, removed)
+		}
 		if !*apply {
 			continue
 		}
@@ -112,9 +117,30 @@ func youtubeUpdate(args []string, out io.Writer) error {
 }
 
 // textChanged reports whether the video's title, description or tags differ
-// from what the current settings produce.
+// from what the current settings produce. Only added or removed tags count:
+// the order YouTube returns them in is not the order sent.
 func textChanged(cur youtube.Snippet, meta domain.UploadMeta) bool {
-	return cur.Title != meta.Title || cur.Description != meta.Description || !slices.Equal(cur.Tags, meta.Tags)
+	added, removed := tagsDiff(cur.Tags, meta.Tags)
+	return cur.Title != meta.Title || cur.Description != meta.Description || len(added)+len(removed) > 0
+}
+
+// tagsDiff returns the tags of next missing from cur (added) and those of cur
+// missing from next (removed), ignoring order and case.
+func tagsDiff(cur, next []string) (added, removed []string) {
+	missing := func(from, in []string) []string {
+		set := make(map[string]bool, len(in))
+		for _, t := range in {
+			set[strings.ToLower(t)] = true
+		}
+		var out []string
+		for _, t := range from {
+			if !set[strings.ToLower(t)] {
+				out = append(out, t)
+			}
+		}
+		return out
+	}
+	return missing(next, cur), missing(cur, next)
 }
 
 func printChange(out io.Writer, field, before, after string) {

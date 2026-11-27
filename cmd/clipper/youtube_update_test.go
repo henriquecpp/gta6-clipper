@@ -13,6 +13,13 @@ func TestTextChanged(t *testing.T) {
 	if textChanged(cur, meta) {
 		t.Error("same texts reported as changed")
 	}
+	// YouTube returns the tags in its own order (and may change the case).
+	if textChanged(cur, domain.UploadMeta{Title: "t", Description: "d", Tags: []string{"B", "a"}}) {
+		t.Error("reordered tags reported as changed")
+	}
+	if added, removed := tagsDiff([]string{"a", "b"}, []string{"b", "c"}); len(added) != 1 || added[0] != "c" || len(removed) != 1 || removed[0] != "a" {
+		t.Errorf("tagsDiff = %q, %q", added, removed)
+	}
 	for name, m := range map[string]domain.UploadMeta{
 		"title":       {Title: "t2", Description: "d", Tags: []string{"a", "b"}},
 		"description": {Title: "t", Description: "d\n\n#GTA6", Tags: []string{"a", "b"}},
