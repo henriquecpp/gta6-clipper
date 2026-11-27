@@ -129,6 +129,7 @@ func TestValidationErrors(t *testing.T) {
 		"yt category":      "youtube: {category_id: gaming}",
 		"yt hashtag":       "youtube: {hashtags: [GTA6]}",
 		"yt title tag":     "youtube: {title_hashtags: ['#GTA 6']}",
+		"yt desc line":     "youtube: {description_line: 'GTA 6 <b>'}",
 		"yt tag comma":     "youtube: {tags: ['GTA, 6']}",
 		"yt timeout":       "youtube: {upload_timeout: 0s}",
 		"yt token file":    "youtube: {token_file: ''}",

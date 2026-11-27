@@ -361,11 +361,17 @@ enviado sem esse toque. O vídeo já sai em 9:16 com até 3 minutos, então o pr
 **Short** (a API não tem um campo "Short").
 
 **O que é enviado** (montado a partir do que o Claude escreveu, sem custo extra de IA):
-- **Título:** a manchete + `youtube.title_hashtags` (`#GTA6 #Shorts`) enquanto couber nos 100 caracteres.
-- **Descrição:** o texto do post (que já credita o streamer), o link `twitch.tv/<streamer>` e as hashtags de
-  `youtube.hashtags` que ainda não estiverem no texto (`#GTA6 #GTAVI #GrandTheftAutoVI #Shorts`).
+- **Título:** o título de busca que o Claude escreveu (ou a manchete) + `youtube.title_hashtags`
+  (`#GTA6 #<streamer> #Shorts`) enquanto couber nos 100 caracteres.
+- **Descrição:** o texto do post (que já credita o streamer e traz 2 a 4 hashtags do momento), a linha
+  `youtube.description_line` ("🎮 <streamer> jogando GTA 6 (Grand Theft Auto VI) ao vivo em
+  twitch.tv/<streamer>": o nome que as pessoas buscam, o nome completo e o link do canal) e as hashtags de
+  `youtube.hashtags` que ainda não estiverem no texto (`#GTA6 #<streamer> #GTAVI #GrandTheftAutoVI
+  #GTA6Brasil #GTA6Clips #Twitch #Shorts`).
 - **Tags:** `youtube.tags` (GTA 6, GTA VI, Grand Theft Auto VI, GTA 6 gameplay…) + o streamer, o jogo e as
   hashtags do post, dentro do limite de 500 caracteres da API.
+- O título, a descrição e as tags aparecem no Telegram logo abaixo do vídeo final, exatamente como serão
+  enviados quando você tocar em 📤.
 - **Categoria** Jogos (`category_id: "20"`), idioma do texto `pt-BR`, idioma do áudio = `language` do
   streamer, "não é conteúdo para crianças", privacidade `youtube.privacy` (`public` por padrão; use
   `unlisted` ou `private` para testar).

@@ -24,10 +24,15 @@ type UploadMeta struct {
 }
 
 // UploadOptions configures BuildUploadMeta (from the configuration). In
-// TitleHashtags, Hashtags and Tags, "{streamer}" is replaced by the login.
+// TitleHashtags, DescriptionLine, Hashtags and Tags, "{streamer}" is replaced
+// by the login.
 type UploadOptions struct {
 	// TitleHashtags are appended to the title while it fits.
 	TitleHashtags []string
+	// DescriptionLine follows the post text in the description: the names
+	// people search for (GTA 6 and the full name of the game) and the channel
+	// link. When it lacks the link, the link gets its own line.
+	DescriptionLine string
 	// Hashtags are appended to the description when the post text lacks them.
 	Hashtags []string
 	// Tags are the base tags, most important first. The editor's search tags
@@ -52,9 +57,10 @@ const (
 
 // BuildUploadMeta writes the title, description and tags of a clip's Short:
 // the editor's YouTube title (or the headline) as the title, the post text
-// (which credits the streamer) plus the channel link and the configured
-// hashtags as the description, and the moment's search tags, the configured
-// tags, the streamer, the game and the post hashtags as tags.
+// (which credits the streamer) plus the description line, the channel link
+// and the configured hashtags as the description, and the moment's search
+// tags, the configured tags, the streamer, the game and the post hashtags as
+// tags.
 func BuildUploadMeta(c *Clip, o UploadOptions) UploadMeta {
 	expand := func(list []string) []string {
 		out := make([]string, len(list))
@@ -69,7 +75,7 @@ func BuildUploadMeta(c *Clip, o UploadOptions) UploadMeta {
 	}
 	return UploadMeta{
 		Title:         uploadTitle(c, expand(o.TitleHashtags)),
-		Description:   uploadDescription(c, expand(o.Hashtags)),
+		Description:   uploadDescription(c, strings.ReplaceAll(o.DescriptionLine, StreamerPlaceholder, c.Streamer), expand(o.Hashtags)),
 		Tags:          uploadTags(append(append([]string{}, search...), expand(o.Tags)...), c),
 		TextLanguage:  o.TextLanguage,
 		AudioLanguage: o.AudioLanguage,
@@ -100,8 +106,11 @@ func uploadTitle(c *Clip, hashtags []string) string {
 	return title
 }
 
-func uploadDescription(c *Clip, hashtags []string) string {
+func uploadDescription(c *Clip, line string, hashtags []string) string {
 	desc := strings.TrimSpace(stripAngles(c.PostText))
+	if line = strings.TrimSpace(stripAngles(line)); line != "" && !strings.Contains(desc, line) {
+		desc = strings.TrimSpace(desc + "\n\n" + line)
+	}
 	if link := "twitch.tv/" + c.Streamer; !strings.Contains(strings.ToLower(desc), strings.ToLower(link)) {
 		desc = strings.TrimSpace(desc + "\n\n🎥 Ao vivo em " + link)
 	}

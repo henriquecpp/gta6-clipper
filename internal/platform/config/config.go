@@ -175,6 +175,9 @@ type YouTube struct {
 	UploadTimeout     Duration `yaml:"upload_timeout"`
 	// TitleHashtags are appended to the title while it fits (100 characters).
 	TitleHashtags []string `yaml:"title_hashtags"`
+	// DescriptionLine follows the post text in the description ("{streamer}"
+	// becomes the login): the searched names of the game and the channel link.
+	DescriptionLine string `yaml:"description_line"`
 	// Hashtags are appended to the description when the post text lacks them.
 	Hashtags []string `yaml:"hashtags"`
 	// Tags are the base search tags; the streamer, the game and the post

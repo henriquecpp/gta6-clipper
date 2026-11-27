@@ -189,7 +189,8 @@ func TestSendFinalAndAlert(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := testClip()
-	post := domain.Post{Headline: "Ele pulou!", Text: "Insano #gta6 streamer<x>"}
+	// Without publishing the YouTube texts are not shown.
+	post := domain.Post{Headline: "Ele pulou!", Text: "Insano #gta6 streamer<x>", Upload: domain.UploadMeta{Title: "t", Description: "d"}}
 	ref, err := n.SendFinal(context.Background(), c, domain.MediaRef(video), post)
 	if err != nil || ref == "" {
 		t.Fatalf("send final = %q, %v", ref, err)
@@ -237,7 +238,12 @@ func TestFinalMessageWithPublishing(t *testing.T) {
 	}
 	c := testClip()
 	c.State, c.Headline = domain.StateRendered, "Ele pulou!"
-	ref, err := n.SendFinal(ctx, c, domain.MediaRef(video), domain.Post{Headline: c.Headline, Text: "texto"})
+	post := domain.Post{Headline: c.Headline, Text: "texto", Upload: domain.UploadMeta{
+		Title:       "Ele pulou no GTA 6 #GTA6 #streamer",
+		Description: "texto\n\n🎮 GTA 6 (Grand Theft Auto VI)\n\n#GTA6 #streamer",
+		Tags:        []string{"gta 6 pulo", "GTA 6"},
+	}}
+	ref, err := n.SendFinal(ctx, c, domain.MediaRef(video), post)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,6 +251,11 @@ func TestFinalMessageWithPublishing(t *testing.T) {
 	if len(vids) != 2 || !strings.Contains(vids[0].Params["reply_markup"], `"callback_data":"p:`+string(c.ID)+`"`) ||
 		!strings.Contains(vids[0].Params["caption"], "toque em 📤") {
 		t.Fatalf("final video = %+v", vids)
+	}
+	want := "▶️ Título no YouTube:\nEle pulou no GTA 6 #GTA6 #streamer\n\n📝 Descrição:\ntexto\n\n🎮 GTA 6 (Grand Theft Auto VI)\n\n" +
+		"#GTA6 #streamer\n\n🏷️ Tags: gta 6 pulo, GTA 6"
+	if msgs := srv.Calls("sendMessage"); len(msgs) != 2 || msgs[0].Params["text"] != want {
+		t.Fatalf("youtube texts = %+v", msgs)
 	}
 	if refs, _ := decodeRefs(ref); len(refs) != 2 {
 		t.Fatalf("refs = %q", ref)

@@ -197,6 +197,9 @@ func (y YouTube) validate() []error {
 			}
 		}
 	}
+	if strings.ContainsAny(y.DescriptionLine, "<>") || len(y.DescriptionLine) > 500 {
+		add("youtube.description_line must have no < or > and at most 500 bytes")
+	}
 	for _, t := range y.Tags {
 		if strings.TrimSpace(t) == "" || strings.ContainsAny(t, "<>,\"") {
 			add("youtube.tags: %q must be non-empty and have no < > , or quotes", t)

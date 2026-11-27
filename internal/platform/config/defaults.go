@@ -64,8 +64,11 @@ func Defaults() *Config {
 			CategoryID:        "20", // Gaming
 			NotifySubscribers: true,
 			UploadTimeout:     dur(15 * time.Minute),
-			TitleHashtags:     []string{"#GTA6", "#Shorts"},
-			Hashtags:          []string{"#GTA6", "#GTAVI", "#GrandTheftAutoVI", "#Shorts", "#{streamer}"},
+			TitleHashtags:     []string{"#GTA6", "#{streamer}", "#Shorts"},
+			// "GTA 6" is how people search; the full name catches the rest.
+			DescriptionLine: "🎮 {streamer} jogando GTA 6 (Grand Theft Auto VI) ao vivo em twitch.tv/{streamer}",
+			Hashtags: []string{"#GTA6", "#{streamer}", "#GTAVI", "#GrandTheftAutoVI", "#GTA6Brasil", "#GTA6Clips",
+				"#Twitch", "#Shorts"},
 			// Most important first: the 500 character budget cuts the tail
 			// (the editor's tags of the moment come before these).
 			Tags: []string{"{streamer}", "{streamer} gta 6", "GTA 6", "GTA VI", "GTA6", "Grand Theft Auto VI",

@@ -87,8 +87,11 @@ youtube:                    # publication as Shorts, only when you tap "Publicar
   upload_timeout: 15m
   token_file: /data/youtube_token.json
   # {streamer} becomes the login. Few, related hashtags: unrelated ones (or more than 60) get ignored or removed.
-  title_hashtags: ["#GTA6", "#Shorts"]                                       # appended to the title while it fits (100 chars)
-  hashtags: ["#GTA6", "#GTAVI", "#GrandTheftAutoVI", "#Shorts", "#{streamer}"] # added to the description if missing
+  title_hashtags: ["#GTA6", "#{streamer}", "#Shorts"]   # appended to the title while it fits (100 chars)
+  # After the post text: "GTA 6" is how people search, the full name catches the rest.
+  description_line: "🎮 {streamer} jogando GTA 6 (Grand Theft Auto VI) ao vivo em twitch.tv/{streamer}"
+  # Added to the description if missing (the editor adds 2 to 4 about the moment).
+  hashtags: ["#GTA6", "#{streamer}", "#GTAVI", "#GrandTheftAutoVI", "#GTA6Brasil", "#GTA6Clips", "#Twitch", "#Shorts"]
   # Most important first; the editor's tags of the moment come before these and the
   # 500-character budget cuts the tail. Tags weigh little in discovery (title and
   # description weigh more), but catch spelling variants.

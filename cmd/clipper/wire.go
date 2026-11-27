@@ -119,6 +119,7 @@ func produceConfig(c *config.Config) app.ProduceConfig {
 		GameLanguage:  c.Whisper.GameLanguage,
 		FrameInterval: c.Editor.FrameInterval.D(),
 		MaxFrames:     c.Editor.MaxFrames,
+		Upload:        uploadOptions(c),
 	}
 }
 
@@ -163,14 +164,18 @@ func newFacecamDetector(c *config.Config, log *slog.Logger) app.FacecamDetector 
 
 // publishConfig maps the youtube settings to the publication use case.
 func publishConfig(c *config.Config) app.PublishConfig {
-	return app.PublishConfig{
-		Upload: domain.UploadOptions{
-			TitleHashtags: c.YouTube.TitleHashtags,
-			Hashtags:      c.YouTube.Hashtags,
-			Tags:          c.YouTube.Tags,
-			TextLanguage:  "pt-BR", // the editor writes headline and post text in pt-BR
-		},
-		Streamers: streamerMap(c),
+	return app.PublishConfig{Upload: uploadOptions(c), Streamers: streamerMap(c)}
+}
+
+// uploadOptions are the YouTube texts settings (shown with the final video
+// and sent on publish).
+func uploadOptions(c *config.Config) domain.UploadOptions {
+	return domain.UploadOptions{
+		TitleHashtags:   c.YouTube.TitleHashtags,
+		DescriptionLine: c.YouTube.DescriptionLine,
+		Hashtags:        c.YouTube.Hashtags,
+		Tags:            c.YouTube.Tags,
+		TextLanguage:    "pt-BR", // the editor writes headline and post text in pt-BR
 	}
 }
 

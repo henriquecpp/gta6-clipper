@@ -83,6 +83,31 @@ func TestBuildUploadMetaFallbacks(t *testing.T) {
 	}
 }
 
+func TestBuildUploadMetaDescriptionLine(t *testing.T) {
+	c := publishClip()
+	c.PostText = "Fuga absurda! Clipe da live de alanzoka na Twitch #Fuga"
+	o := UploadOptions{
+		DescriptionLine: "🎮 {streamer} jogando GTA 6 (Grand Theft Auto VI) ao vivo em twitch.tv/{streamer} <x>",
+		Hashtags:        []string{"#GTA6", "#{streamer}", "#fuga"},
+	}
+	// The line carries the link, so no separate link line.
+	want := "Fuga absurda! Clipe da live de alanzoka na Twitch #Fuga\n\n" +
+		"🎮 alanzoka jogando GTA 6 (Grand Theft Auto VI) ao vivo em twitch.tv/alanzoka x\n\n#GTA6 #alanzoka"
+	if m := BuildUploadMeta(c, o); m.Description != want {
+		t.Errorf("description = %q\nwant %q", m.Description, want)
+	}
+	// A line without the link still gets the link; a line already in the
+	// post text is not repeated.
+	o.DescriptionLine = "GTA 6 (Grand Theft Auto VI)"
+	if m := BuildUploadMeta(c, o); !strings.Contains(m.Description, "Twitch #Fuga\n\nGTA 6 (Grand Theft Auto VI)\n\n🎥 Ao vivo em twitch.tv/alanzoka\n\n#GTA6") {
+		t.Errorf("description = %q", m.Description)
+	}
+	c.PostText = "No GTA 6 (Grand Theft Auto VI) ele fugiu. Clipe da live de alanzoka"
+	if m := BuildUploadMeta(c, o); strings.Count(m.Description, o.DescriptionLine) != 1 {
+		t.Errorf("description = %q", m.Description)
+	}
+}
+
 func TestCleanHashtag(t *testing.T) {
 	cases := map[string]string{"#GTA6": "#GTA6", "#gta6!": "#gta6", "#": "", "GTA6": "", "#a#b": "", " #x, ": "#x"}
 	for in, want := range cases {

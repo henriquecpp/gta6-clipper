@@ -37,6 +37,9 @@ type ProduceConfig struct {
 	// them); MaxFrames caps how many (the interval grows on long windows).
 	FrameInterval time.Duration
 	MaxFrames     int
+	// Upload builds the YouTube title, description and tags shown with the
+	// final video (the same options PublishClip uses).
+	Upload domain.UploadOptions
 }
 
 // ProduceFinalClip turns an approved clip into the delivered vertical video:
@@ -363,7 +366,7 @@ func (u *ProduceFinalClip) saveUsage(ctx context.Context, id domain.ClipID, usag
 // pending media (the final video stays in the output directory).
 func (u *ProduceFinalClip) deliver(ctx context.Context, c *domain.Clip, log *slog.Logger) error {
 	t0 := u.clock.Now()
-	post := domain.Post{Headline: c.Headline, Text: c.PostText}
+	post := domain.Post{Headline: c.Headline, Text: c.PostText, Upload: domain.BuildUploadMeta(c, u.cfg.Upload)}
 	msg, err := u.notifier.SendFinal(ctx, c, c.FinalMedia, post)
 	if err != nil {
 		return fmt.Errorf("deliver final video: %w", err)

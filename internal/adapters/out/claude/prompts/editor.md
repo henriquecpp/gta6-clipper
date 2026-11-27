@@ -87,14 +87,14 @@ Examples (style only, do not copy):
 
 - Description in pt-BR published with the clip (also the YouTube description).
 - One or two short sentences with personality that add to the headline instead of repeating it: the context, a joke about the situation, or a question that invites comments ("vocês teriam pulado?"). Not a dry list of events. Keep clear what the streamer did and what the game or a character did.
-- Then credit the streamer with their exact login (for example "🎥 Clipe da live de nome_do_streamer na Twitch"), then 3 to 6 relevant hashtags (game, streamer, #twitch, #clips...).
+- Then credit the streamer with their exact login (for example "🎥 Clipe da live de nome_do_streamer na Twitch"), then 2 to 4 hashtags about this moment: what happens or what is in it (#Melancia, #FugaDaPolicia, #AcidenteDeMoto). The system appends the game, the streamer, #Twitch and #Shorts hashtags and a line with the game's full name: do not repeat them.
 - The post text must always contain the streamer login.
 
 # YouTube title (youtube_title)
 
 - The title of the Short on YouTube, in pt-BR. Unlike the headline (burned on the video), it is written to be **found in search**: the title and the description weigh much more in YouTube discovery than tags.
 - Put the searched words in it naturally: the game as people search it ("GTA 6"), the streamer's name and what happens in the clip, in plain words a viewer would type (fuga da polícia, acidente de moto, assalto ao banco...). Lead with the angle, not with a neutral report: searchable **and** clickable ("xQc jura que o carro estava parado no GTA 6", not "GTA 6: xqc bate o carro e morre").
-- Within the character limit in the constraints. No hashtags (the system appends #GTA6 #Shorts). At most one emoji.
+- Within the character limit in the constraints. No hashtags (the system appends #GTA6, the streamer and #Shorts). At most one emoji.
 - It must describe what really happens in the clip: misleading titles are against YouTube's spam policy and get the video removed. Never credit the streamer with what a game character says or does.
 
 # Search tags (search_tags)

@@ -3,6 +3,7 @@ package app_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -56,6 +57,8 @@ func newProduceEnv(t *testing.T) *produceEnv {
 		HeadlineMaxChars: 60, SnapMargin: 150 * time.Millisecond, Pricing: pricing, MaxCost: 50_000,
 		Width: 1080, Height: 1920, FPS: 30, MaxBytes: 45 << 20,
 		Streamers: map[string]domain.Streamer{"streamer_a": {Login: "streamer_a", Layout: domain.LayoutStack}},
+		Upload: domain.UploadOptions{TitleHashtags: []string{"#GTA6", "#{streamer}"},
+			DescriptionLine: "🎮 GTA 6 (Grand Theft Auto VI) · twitch.tv/{streamer}", Tags: []string{"GTA 6"}},
 	}, e.repo, e.trans, e.editor, e.renderer, e.notifier, e.media, e.clock, discardLog(), e.metrics, nil)
 	return e
 }
@@ -113,6 +116,11 @@ func TestProduceHappyPath(t *testing.T) {
 	}
 	if len(e.notifier.Finals) != 1 || e.notifier.Finals[0].Text != got.PostText {
 		t.Fatalf("delivered = %+v", e.notifier.Finals)
+	}
+	// The YouTube texts the publish button would send come with the video.
+	if up := e.notifier.Finals[0].Upload; up.Title != "Ele pulou da ponte! #GTA6 #streamer_a" ||
+		!strings.HasSuffix(up.Description, "\n\n🎮 GTA 6 (Grand Theft Auto VI) · twitch.tv/streamer_a") || !slices.Contains(up.Tags, "GTA 6") {
+		t.Fatalf("upload texts = %+v", up)
 	}
 	if e.media.IsLive(c.SourceMedia) || e.media.IsLive(c.PreviewMedia) {
 		t.Fatal("pending media must be freed after delivery")

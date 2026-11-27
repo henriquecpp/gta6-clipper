@@ -179,11 +179,16 @@ func (n *Notifier) SendFailure(ctx context.Context, c *domain.Clip, reason strin
 }
 
 // SendFinal sends the final video (headline as caption, with the publish
-// button when publishing is enabled) and then the post text as a plain
-// message, easy to copy. Nothing is published until the button is tapped.
+// button when publishing is enabled) and then a plain message, easy to copy:
+// the YouTube title, description and tags when publishing is enabled, the
+// post text otherwise. Nothing is published until the button is tapped.
 func (n *Notifier) SendFinal(ctx context.Context, c *domain.Clip, video domain.MediaRef, post domain.Post) (domain.MessageRef, error) {
 	view := c.Clone()
 	view.State = domain.StateDelivered // the caption and button once delivered
+	text := post.Text
+	if n.publish && post.Upload.Title != "" {
+		text = uploadText(post.Upload)
+	}
 	var refs []msgRef
 	var errs []error
 	for _, chat := range n.chats {
@@ -193,7 +198,7 @@ func (n *Notifier) SendFinal(ctx context.Context, c *domain.Clip, video domain.M
 			continue
 		}
 		refs = append(refs, msgRef{chat: chat, msg: msg})
-		if _, err := n.bot.SendMessage(ctx, &telego.SendMessageParams{ChatID: telego.ChatID{ID: chat}, Text: truncate(post.Text, 4000)}); err != nil {
+		if _, err := n.bot.SendMessage(ctx, &telego.SendMessageParams{ChatID: telego.ChatID{ID: chat}, Text: truncate(text, 4000)}); err != nil {
 			errs = append(errs, fmt.Errorf("chat %d post text: %w", chat, n.redact(err)))
 		}
 	}

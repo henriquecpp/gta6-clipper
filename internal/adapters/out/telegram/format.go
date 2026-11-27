@@ -108,6 +108,17 @@ func finalCaption(c *domain.Clip, headline string, publish bool) string {
 	return truncate(b.String(), maxCaption)
 }
 
+// uploadText is the message after the final video when publishing is
+// enabled: exactly what the publish button sends to YouTube (the description
+// starts with the post text, so it is still easy to copy).
+func uploadText(m domain.UploadMeta) string {
+	text := "▶️ Título no YouTube:\n" + m.Title + "\n\n📝 Descrição:\n" + m.Description
+	if len(m.Tags) > 0 {
+		text += "\n\n🏷️ Tags: " + strings.Join(m.Tags, ", ")
+	}
+	return text
+}
+
 // failureText is the alert sent when a clip fails.
 func failureText(c *domain.Clip, reason string) string {
 	return truncate(fmt.Sprintf("⚠️ <b>Falha no clipe de %s</b>\nClipe: <code>%s</code>\nEtapa: %s\nMotivo: %s",

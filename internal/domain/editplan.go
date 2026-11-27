@@ -20,6 +20,9 @@ type Caption struct {
 type Post struct {
 	Headline string
 	Text     string
+	// Upload is what the publish button sends to YouTube, shown with the
+	// video so the human sees it before tapping.
+	Upload UploadMeta
 }
 
 // EditConstraints are the rules an edit plan must respect.
