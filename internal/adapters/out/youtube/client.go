@@ -26,11 +26,13 @@ import (
 // accepts youtube (developers.google.com/identity/protocols/oauth2/limited-input-device).
 const Scope = "https://www.googleapis.com/auth/youtube"
 
-// DesktopScopes are the narrower scopes of the desktop (loopback) flow:
-// upload videos and read the channel, to confirm which one was authorized.
+// DesktopScopes are the scopes of the desktop (loopback) flow: upload videos,
+// read the channel (to confirm which one was authorized) and edit the text of
+// published videos (youtube-update; videos.update needs youtube.force-ssl).
 var DesktopScopes = []string{
 	"https://www.googleapis.com/auth/youtube.upload",
 	"https://www.googleapis.com/auth/youtube.readonly",
+	"https://www.googleapis.com/auth/youtube.force-ssl",
 }
 
 // ShortsURL is the prefix of the link of a published Short.

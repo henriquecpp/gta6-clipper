@@ -43,6 +43,9 @@ type google struct {
 	putAnswers   []answer // PUT with bytes; status 0 = accept and finish
 	statusAnswer *answer  // PUT bytes */N; nil = 308 with the received range
 	channels     string
+	videoAnswers []answer // GET/PUT /youtube/v3/videos answers, in order (last one repeats)
+	videoCalls   []string // "METHOD query"
+	updateBody   []byte
 }
 
 type answer struct {
@@ -94,6 +97,14 @@ func (g *google) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_, _ = io.WriteString(w, g.channels)
+	case r.URL.Path == "/youtube/v3/videos":
+		g.videoCalls = append(g.videoCalls, r.Method+" "+r.URL.RawQuery)
+		if r.Method == http.MethodPut {
+			g.updateBody, _ = io.ReadAll(r.Body)
+		}
+		a := pop(&g.videoAnswers)
+		w.WriteHeader(a.status)
+		_, _ = io.WriteString(w, a.body)
 	case r.Method == http.MethodPost && r.URL.Path == "/upload/youtube/v3/videos":
 		g.initHdr = r.Header.Clone()
 		g.initHdr.Set("X-Query", r.URL.RawQuery)

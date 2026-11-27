@@ -314,6 +314,7 @@ Ele captura por 60 s, mostra frames de áudio/fala, retém 20 s e estima a latê
 | Backup do banco | `task db:backup` (`scripts\backup.ps1`) → `.\backups\` |
 | Reautorizar a Twitch | `task auth:twitch` |
 | Autorizar/reautorizar o canal do YouTube | `task auth:youtube` (depois `docker compose up -d --force-recreate app`) |
+| Reescrever os textos dos Shorts já publicados com a config atual | `task youtube:update` (mostra o que muda) e `task youtube:update -- -apply` (atualiza; 50 unidades de cota por vídeo) |
 | Testar transcrição + render sem Claude | `docker compose run --rm --no-deps app dryrun` (lista clipes com mídia retida) e `... app dryrun <clip_id>` |
 | Testar os textos do Claude num clipe retido | `docker compose run --rm --no-deps app dryrun -editor <clip_id>` (gasta tokens, ~US$ 0,004; não muda nada) |
 
@@ -406,9 +407,16 @@ entrada limitada", use `task auth:youtube -- -device` (código digitado em `http
 - O envio usa o protocolo de **upload resumível**: se a conexão cair no meio, o app pergunta ao YouTube quanto
   já chegou e continua de onde parou (até 5 tentativas, `youtube.upload_timeout` no total). Ele **nunca**
   recomeça um upload do zero sozinho, para não publicar o mesmo vídeo duas vezes.
-- Escopos pedidos: `youtube.upload` (enviar vídeos) e `youtube.readonly` (ler o nome do canal para você
-  conferir). O fluxo `-device` só aceita `youtube` (escopo completo). O token fica em
-  `/data/youtube_token.json` (modo 0600), nunca no repositório.
+- Escopos pedidos: `youtube.upload` (enviar vídeos), `youtube.readonly` (ler o nome do canal para você
+  conferir) e `youtube.force-ssl` (editar título, descrição e tags dos Shorts já publicados com
+  `task youtube:update`; o `videos.update` não aceita um escopo menor). Autorizações feitas antes disso só
+  enviam: rode `task auth:youtube` de novo para editar. O fluxo `-device` só aceita `youtube` (escopo
+  completo). O token fica em `/data/youtube_token.json` (modo 0600), nunca no repositório.
+- **`task youtube:update`** remonta título, descrição e tags de cada Short publicado com as configurações
+  atuais (`youtube.title_hashtags`, `description_line`, `hashtags`, `tags`) e os textos salvos do clipe, sem
+  chamar a IA. Sem `-- -apply` só mostra o antes e depois. O `videos.update` apaga os campos que a
+  requisição omite, então categoria e idiomas são copiados do vídeo; edições feitas à mão no YouTube Studio
+  nesses três campos são sobrescritas.
 - Se a autorização for revogada ou expirar, a mensagem mostra o erro com a instrução de rodar
   `task auth:youtube` de novo.
 

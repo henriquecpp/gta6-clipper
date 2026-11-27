@@ -21,11 +21,12 @@ import (
 // videoResource is the metadata sent with videos.insert
 // (developers.google.com/youtube/v3/docs/videos).
 type videoResource struct {
-	Snippet videoSnippet `json:"snippet"`
-	Status  videoStatus  `json:"status"`
+	Snippet Snippet     `json:"snippet"`
+	Status  videoStatus `json:"status"`
 }
 
-type videoSnippet struct {
+// Snippet is the text of a video (videos resource, snippet part).
+type Snippet struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	// Tags is omitted when empty: the API rejects an empty tags value.
@@ -42,7 +43,7 @@ type videoStatus struct {
 
 func (c *Client) resource(meta domain.UploadMeta) videoResource {
 	return videoResource{
-		Snippet: videoSnippet{
+		Snippet: Snippet{
 			Title: meta.Title, Description: meta.Description, Tags: meta.Tags, CategoryID: c.cfg.CategoryID,
 			DefaultLanguage: meta.TextLanguage, DefaultAudioLanguage: meta.AudioLanguage,
 		},

@@ -122,6 +122,11 @@ tasks:
       - "{{.COMPOSE}} run --rm --no-deps -p 127.0.0.1:8765:8765 app youtube-auth {{.CLI_ARGS}}"
     interactive: true
 
+  youtube:update:
+    desc: Rewrite the title, description and tags of the published Shorts with the current youtube settings (shows the changes; `-- -apply` updates them)
+    cmds:
+      - "{{.COMPOSE}} run --rm --no-deps app youtube-update {{.CLI_ARGS}}"
+
   check:
     desc: generate without diff + lint + test:race (run before finishing any task)
     cmds:

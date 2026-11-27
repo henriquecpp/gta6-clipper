@@ -10,6 +10,7 @@
 //	backup DEST  write a consistent copy of the SQLite database (VACUUM INTO)
 //	twitch-auth  obtain the Twitch user token (Device Code Flow)
 //	youtube-auth authorize the YouTube channel that receives the Shorts
+//	youtube-update [-apply]  rewrite the texts of published Shorts with the current settings
 //	probe LOGIN  capture a public live for a while and estimate the HLS latency
 //	dryrun [ID]  transcribe and render a retained clip without Claude (no state change)
 package main
@@ -46,12 +47,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 		err = twitchAuth(args, stdout)
 	case "youtube-auth":
 		err = youtubeAuth(args, stdout)
+	case "youtube-update":
+		err = youtubeUpdate(args, stdout)
 	case "probe":
 		err = probe(args, stdout)
 	case "dryrun":
 		err = dryRun(args, stdout)
 	case "help", "-h", "--help":
-		_, _ = fmt.Fprintln(stdout, "usage: clipper [run|healthcheck|gpucheck|backup DEST|twitch-auth|youtube-auth|probe LOGIN|dryrun [CLIP_ID]]")
+		_, _ = fmt.Fprintln(stdout, "usage: clipper [run|healthcheck|gpucheck|backup DEST|twitch-auth|youtube-auth|youtube-update [-apply]|probe LOGIN|dryrun [CLIP_ID]]")
 		return 0
 	default:
 		err = fmt.Errorf("unknown command %q", cmd)
